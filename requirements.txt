@@ -1,0 +1,39 @@
+# FastAPI Framework and Dependencies
+fastapi                          # Main FastAPI framework
+uvicorn[standard]                # ASGI server for running FastAPI
+pydantic                         # Data validation and settings management
+pydantic-settings                # Settings management using Pydantic
+
+# Authentication and Security
+python-jose[cryptography]        # JWT token creation and validation
+passlib[bcrypt]                  # Password hashing (if needed later)
+python-multipart                 # Form data parsing
+
+# Database - Firebase/Firestore
+firebase-admin                   # Firebase Admin SDK for Firestore
+google-cloud-firestore           # Google Cloud Firestore client
+
+# HTTP Client
+httpx                            # Async HTTP client (for external API calls)
+
+# Development and Testing
+pytest                           # Testing framework
+pytest-asyncio                   # Async testing support
+black                            # Code formatter
+flake8                           # Linting
+isort                            # Import sorting
+
+# Environment and Configuration
+python-dotenv                    # Environment variable management
+
+# CORS and Middleware
+fastapi-cors                     # CORS handling (alternative to FastAPI built-in)
+
+# Date and Time
+python-dateutil                  # Date parsing utilities
+
+# Logging
+structlog                        # Structured logging
+
+# Production Dependencies
+gunicorn                         # Production WSGI server (if needed)
