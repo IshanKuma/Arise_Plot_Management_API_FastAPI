@@ -1,0 +1,18 @@
+# Development-only dependencies
+-r requirements.txt
+
+# Additional Development Tools
+jupyter==1.0.0                   # Jupyter notebook for data exploration
+ipython==8.17.2                  # Enhanced Python REPL
+pre-commit==3.5.0                # Git hooks for code quality
+mypy==1.7.1                      # Static type checking
+
+# API Documentation
+mkdocs==1.5.3                    # Documentation generator
+mkdocs-material==9.4.8           # Material theme for mkdocs
+
+# Database Migration Tools (if needed)
+alembic==1.12.1                  # Database migration tool (for SQL databases)
+
+# Load Testing
+locust==2.17.0                   # Load testing tool
