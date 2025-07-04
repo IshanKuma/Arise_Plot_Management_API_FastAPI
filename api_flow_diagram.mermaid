@@ -17,91 +17,34 @@ flowchart TD
         M --> N[Client Stores Token]
     end
 
-    subgraph plots ["Available Plots Retrieval - GET /plots/available"]
-        O[Client App] -->|"GET /plots/available?<br/>country=Gabon&zoneCode=GSEZ&category=Residential&phase=2<br/>Authorization: Bearer token"| P[FastAPI Backend]
+    subgraph unified ["Unified API Request Flow"]
+        N --> O[Client Makes API Request<br/>Authorization: Bearer token]
+        O --> P[FastAPI Backend]
         P --> Q[Verify JWT Token]
         Q -->|"Invalid/Expired"| R[401 Unauthorized]
         Q -->|"Valid"| S["Extract User Payload<br/>{userId, role, zone, permissions}"]
-        S --> T{"Check Read Permission<br/>for plots"}
+        S --> T{Check Required Permission}
         T -->|"No Permission"| U[403 Forbidden]
-        T -->|"Has Permission"| V[Build Firestore Query]
-        V --> W["Apply Query Parameters:<br/>country, zoneCode, category, phase"]
-        W --> X{User Role Check}
-        X -->|"zone_admin"| Y["Add Zone Filter:<br/>zoneCode == user.zone"]
-        X -->|"super_admin/normal_user"| Z[No Additional Filter]
-        Y --> AA[Query Firestore]
-        Z --> AA
-        AA --> BB[(Firestore Database)]
-        BB --> CC[Return Plot Documents]
-        CC --> DD["Format Response:<br/>{plots: [{plotName, plotStatus, category, phase, areaInSqm, areaInHa}]}"]
-        DD --> EE[200 OK Response]
+        T -->|"Has Permission"| V{Request Type}
+        
+        V -->|"GET /plots/available"| RR[Query Firestore<br/>GET /plots/available]
+        V -->|"PUT /update-plot"| SS[Update Firestore<br/>PUT /update-plot]
+        V -->|"PATCH /release-plot"| TT[Update Firestore<br/>PATCH /release-plot]
+        V -->|"POST /country/zones"| UU[Create/Update Firestore<br/>POST /country/zones]
+        V -->|"GET /plot-details"| VV[Query Firestore<br/>GET /plot-details]
+        
+        RR --> WW[(Firestore Database)]
+        SS --> XX[(Firestore Database)]
+        TT --> YY[(Firestore Database)]
+        UU --> ZZ[(Firestore Database)]
+        VV --> AAA[(Firestore Database)]
+        
+        WW --> BBB["200 OK<br/>Available Plots Response"]
+        XX --> CCC["200 OK<br/>Plot Updated Successfully"]
+        YY --> DDD["200 OK<br/>Plot Released Successfully"]
+        ZZ --> EEE["200 OK<br/>Zone Data Saved"]
+        AAA --> FFF["200 OK<br/>Plot Details Response"]
     end
-
-    subgraph update ["Plot Update - PUT /update-plot"]
-        FF[Client App] -->|"PUT /update-plot<br/>Body: {country, zoneCode, phase, plotName, companyName, sector, plotStatus, etc.}<br/>Authorization: Bearer token"| GG[FastAPI Backend]
-        GG --> HH[Verify JWT Token]
-        HH -->|"Invalid/Expired"| II[401 Unauthorized]
-        HH -->|"Valid"| JJ[Extract User Payload]
-        JJ --> KK{"Check Write Permission<br/>for plots"}
-        KK -->|"No Permission"| LL[403 Forbidden]
-        KK -->|"Has Permission"| MM{Role-Based Access Check}
-        MM -->|"zone_admin"| NN[Verify plot belongs to user zone]
-        MM -->|"super_admin"| OO[Full Access]
-        NN -->|"Wrong Zone"| PP[403 Forbidden]
-        NN -->|"Correct Zone"| OO
-        OO --> QQ[Update Plot in Firestore]
-        QQ --> RR[(Firestore Database)]
-        RR --> SS["200 OK<br/>Plot updated successfully"]
-    end
-
-    subgraph release ["Plot Release - PATCH /release-plot"]
-        TT[Client App] -->|"PATCH /release-plot<br/>Body: {country, zoneCode, plotStatus: 'available', plotName}<br/>Authorization: Bearer token"| UU[FastAPI Backend]
-        UU --> VV[Verify JWT Token]
-        VV -->|"Invalid/Expired"| WW[401 Unauthorized]
-        VV -->|"Valid"| XX[Extract User Payload]
-        XX --> YY{Check Write Permission}
-        YY -->|"No Permission"| ZZ[403 Forbidden]
-        YY -->|"Has Permission"| AAA{Role-Based Access Check}
-        AAA -->|"zone_admin"| BBB[Verify plot belongs to user zone]
-        AAA -->|"super_admin"| CCC[Full Access]
-        BBB -->|"Wrong Zone"| DDD[403 Forbidden]
-        BBB -->|"Correct Zone"| CCC
-        CCC --> EEE[Set plotStatus to 'Available']
-        EEE --> FFF[(Firestore Database)]
-        FFF --> GGG["200 OK<br/>Plot released successfully"]
-    end
-
-    subgraph zones ["Zone Master - POST /country/zones"]
-        HHH[Client App] -->|"POST /country/zones<br/>Body: {country, zoneCode, phase, landArea}<br/>Authorization: Bearer token"| III[FastAPI Backend]
-        III --> JJJ[Verify JWT Token]
-        JJJ -->|"Invalid/Expired"| KKK[401 Unauthorized]
-        JJJ -->|"Valid"| LLL[Extract User Payload]
-        LLL --> MMM{"Check Write Permission<br/>for zones"}
-        MMM -->|"No Permission"| NNN[403 Forbidden]
-        MMM -->|"Has Permission"| OOO[Create/Update Zone Master]
-        OOO --> PPP[(Firestore Database)]
-        PPP --> QQQ["200 OK<br/>Zone data saved"]
-    end
-
-    subgraph openapi ["Open API - GET /plot-details"]
-        RRR[Third-party Client] -->|"GET /plot-details?<br/>country=Gabon&zoneCode=GSEZ<br/>Authorization: Bearer token"| SSS[FastAPI Backend]
-        SSS --> TTT[Verify JWT Token]
-        TTT -->|"Invalid/Expired"| UUU[401 Unauthorized]
-        TTT -->|"Valid"| VVV[Extract User Payload]
-        VVV --> WWW{Check Read Permission}
-        WWW -->|"No Permission"| XXX[403 Forbidden]
-        WWW -->|"Has Permission"| YYY[Query Plot Details]
-        YYY --> ZZZ[(Firestore Database)]
-        ZZZ --> AAAA["Return Detailed Plot Info<br/>{metadata, plots: [{plotName, category, areaInHa, sector, activity, plotStatus, etc.}]}"]
-        AAAA --> BBBB[200 OK Response]
-    end
-
-    %% Token usage flow
-    N -.->|"Token used for API calls"| O
-    N -.->|"Token used for API calls"| FF
-    N -.->|"Token used for API calls"| TT
-    N -.->|"Token used for API calls"| HHH
-    N -.->|"Token used for API calls"| RRR
 
     %% Styling
     classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
@@ -111,11 +54,13 @@ flowchart TD
     classDef successStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
     classDef decisionStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef permissionStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef requestStyle fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
 
-    class A,O,FF,TT,HHH,RRR,N clientStyle
-    class B,P,GG,UU,III,SSS,G,Q,HH,VV,JJJ,TTT,S,JJ,XX,LLL,VVV backendStyle
-    class BB,RR,FFF,PPP,ZZZ dbStyle
-    class D,E,F,R,U,II,LL,WW,ZZ,KKK,NNN,UUU,XXX,PP,DDD errorStyle
-    class M,EE,SS,GGG,QQQ,BBBB successStyle
-    class C,T,KK,MM,YY,AAA,MMM,WWW,X,H decisionStyle
-    class I,J,K,NN,BBB permissionStyle
+    class A,O clientStyle
+    class B,P,Q,S backendStyle
+    class WW,XX,YY,ZZ,AAA dbStyle
+    class D,E,F,R,U errorStyle
+    class M,BBB,CCC,DDD,EEE,FFF successStyle
+    class C,T,V decisionStyle
+    class I,J,K permissionStyle
+    class RR,SS,TT,UU,VV requestStyle
