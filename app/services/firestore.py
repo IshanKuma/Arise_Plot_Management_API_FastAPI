@@ -291,10 +291,11 @@ class FirestoreService:
         Raises:
             ValueError: If zone code already exists
         """
-        # Check if zone already exists
+        # Check if zone already exists (country + zoneCode combination)
         for zone in self.zones_data:
-            if zone["zoneCode"] == request.zoneCode:
-                raise ValueError("Zone code already exists")
+            if (zone["zoneCode"] == request.zoneCode and 
+                zone["country"] == request.country):
+                raise ValueError(f"Zone code '{request.zoneCode}' already exists in {request.country}")
         
         # Add new zone
         new_zone = {

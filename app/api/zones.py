@@ -73,7 +73,10 @@ async def create_zone(
                 detail={
                     "error_code": "ZONE_EXISTS",
                     "message": str(e),
-                    "details": {"zone_code": request.zoneCode}
+                    "details": {
+                        "zone_code": request.zoneCode,
+                        "country": request.country
+                    }
                 }
             )
         else:

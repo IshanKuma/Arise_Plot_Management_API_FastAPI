@@ -1,5 +1,39 @@
 # API Specifications - Request/Response Schema Documentation
 
+## JWT Implementation Details
+
+### JWT Token Structure
+The API uses HS256 (HMAC with SHA-256) symmetric encryption for JWT tokens:
+
+```json
+{
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "payload": {
+    "userId": "user_001",
+    "role": "super_admin",
+    "zone": "GSEZ",
+    "permissions": {
+      "read": ["plots", "zones", "users"],
+      "write": ["plots", "zones", "users"]
+    },
+    "iat": 1720972800,
+    "exp": 1721059200
+  },
+  "signature": "HMAC-SHA256-signature-here"
+}
+```
+
+### Security Implementation
+- **Secret Key**: Retrieved from `JWT_SECRET_KEY` environment variable
+- **Algorithm**: HS256 (symmetric key - same key for signing and verification)
+- **Expiry**: 24 hours (86400 seconds)
+- **Verification**: All API endpoints verify token signature using the same secret key
+
+---
+
 ## 1. Authentication API - POST /auth/token
 
 ### Request Schema
@@ -202,43 +236,152 @@
 
 ---
 
-## Common Business Validations
+## 7. User Management API - POST /users/create_user
 
-### Role-Based Permissions
-- **super_admin**: Full read/write access to all zones
-- **zone_admin**: Read/write access only to assigned zone
-- **normal_user**: Read-only access to plots
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | Must be valid email format |
+| role | string | 20 | Mandatory | Must be one of: super_admin, zone_admin, normal_user |
+| zone | string | 10 | Mandatory | Must be valid zone code (GSEZ, OSEZ, GABON, TEST) |
 
-### Zone Codes
-- Must follow format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
-- Must exist in the zone master data
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
 
-### Plot Status Values
-- **Available**: Plot is free for allocation
-- **Allocated**: Plot is assigned to a company
-- **Reserved**: Plot is temporarily held
+### Response Schema - Success (201)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | User email address |
+| role | string | 20 | Mandatory | Assigned user role |
+| zone | string | 10 | Mandatory | Assigned zone code |
+| createdDate | string | 30 | Mandatory | ISO 8601 timestamp |
+| lastModified | string | 30 | Mandatory | ISO 8601 timestamp |
 
-### Date Format
-- All dates must be in ISO 8601 format: YYYY-MM-DD
-- Future dates validation where applicable
-
-### Numeric Validations
-- Areas must be positive decimal values
-- Phase numbers must be positive integers
-- Investment amounts must be non-negative
-- Employment numbers must be non-negative integers
+### Response Schema - Error (400/401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | USER_EXISTS, INVALID_INPUT, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+| details | object | - | Optional | Additional error context |
 
 ---
 
-## Error Codes Reference
+## 8. User Management API - PUT /users/update_user
 
-| Error Code | HTTP Status | Description |
-|-----------|-------------|-------------|
-| MISSING_PARAMETERS | 400 | Required parameters are missing |
-| INVALID_ROLE | 400 | Role is not in allowed values |
-| INVALID_ZONE | 400 | Zone code is invalid |
-| UNAUTHORIZED | 401 | Invalid or expired JWT token |
-| FORBIDDEN | 403 | Insufficient permissions |
-| PLOT_NOT_FOUND | 404 | Plot does not exist |
-| ZONE_EXISTS | 409 | Zone code already exists |
-| INTERNAL_ERROR | 500 | Server internal error |
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | Must be valid email of existing user |
+| role | string | 20 | Optional | Must be one of: super_admin, zone_admin, normal_user |
+| zone | string | 10 | Optional | Must be valid zone code (GSEZ, OSEZ, GABON, TEST) |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | User email address |
+| role | string | 20 | Mandatory | Updated user role |
+| zone | string | 10 | Mandatory | Updated zone code |
+| createdDate | string | 30 | Mandatory | Original creation timestamp |
+| lastModified | string | 30 | Mandatory | Updated modification timestamp |
+
+### Response Schema - Error (400/401/403/404)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | USER_NOT_FOUND, NO_UPDATE_FIELDS, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+| details | object | - | Optional | Additional error context |
+
+---
+
+## 9. User Management API - GET /users/list_users
+
+### Request Parameters
+No query parameters required.
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
+
+### Response Schema - Success (200)
+Response is an array of user objects:
+
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| [].email | string | 100 | Mandatory | User email address |
+| [].role | string | 20 | Mandatory | User role |
+| [].zone | string | 10 | Mandatory | User zone code |
+| [].createdDate | string | 30 | Mandatory | Creation timestamp |
+| [].lastModified | string | 30 | Mandatory | Last modification timestamp |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## User Storage Implementation
+
+### Current Implementation (Development)
+- **Storage**: In-memory Python dictionary
+- **Key**: User email address (lowercase)
+- **Value**: UserModel object with email, role, zone, timestamps
+- **Persistence**: Data lost on server restart
+- **Concurrency**: Not thread-safe
+
+### Data Structure
+```python
+_users: Dict[str, UserModel] = {
+    "user@example.com": UserModel(
+        email="user@example.com",
+        role="zone_admin",
+        zone="GSEZ",
+        createdDate=datetime(2024, 1, 1, 10, 0, 0),
+        lastModified=datetime(2024, 1, 1, 10, 0, 0)
+    )
+}
+```
+
+### Production Requirements
+- **Storage**: Firestore collection "users"
+- **Indexing**: Email (unique), role, zone
+- **Security**: Firestore security rules
+- **Backup**: Automatic Firestore backups
+- **Concurrency**: Firestore handles concurrent access
+
+---
+
+## Security & Access Control
+
+### Role-Based Permission Matrix
+| Operation | super_admin | zone_admin | normal_user |
+|-----------|-------------|------------|-------------|
+| Create Users | ✅ | ❌ | ❌ |
+| Update Users | ✅ | ❌ | ❌ |
+| List Users | ✅ | ❌ | ❌ |
+| Read All Plots | ✅ | ✅ (zone only) | ✅ |
+| Write Plots | ✅ | ✅ (zone only) | ❌ |
+| Read Zones | ✅ | ✅ (zone only) | ✅ |
+| Write Zones | ✅ | ✅ (zone only) | ❌ |
+
+### JWT Security Considerations
+- **Algorithm**: HS256 (symmetric) - development friendly
+- **Secret Rotation**: Manual (requires restart)
+- **Token Storage**: Client responsibility
+- **Revocation**: Not implemented (tokens valid until expiry)
+- **Production Recommendations**: 
+  - Use RS256 (asymmetric keys)
+  - Implement token blacklisting
+  - Add refresh token mechanism
+  - Store secrets in secure key management
+
+---

@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.plots import router as plots_router
 from app.api.zones import router as zones_router
+from app.api.users import router as users_router
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(plots_router, prefix=settings.API_V1_STR)
 app.include_router(zones_router, prefix=settings.API_V1_STR)
+app.include_router(users_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():

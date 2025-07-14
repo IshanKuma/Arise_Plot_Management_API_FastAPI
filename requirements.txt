@@ -5,7 +5,7 @@ pydantic                         # Data validation and settings management
 pydantic-settings                # Settings management using Pydantic
 
 # Authentication and Security
-python-jose[cryptography]        # JWT token creation and validation
+PyJWT[cryptography]              # JWT token creation and validation with RS256 support
 passlib[bcrypt]                  # Password hashing (if needed later)
 python-multipart                 # Form data parsing
 

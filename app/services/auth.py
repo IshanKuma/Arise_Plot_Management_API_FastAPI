@@ -1,20 +1,24 @@
 """
 Authentication service for JWT token creation and validation.
 Implements the exact logic as specified in Flow 1 requirements.
+Enhanced with user management capabilities.
 """
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import jwt
 from app.core.config import settings
-from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest
+from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest, CreateUserRequest, UpdateUserRequest, UserModel, UserResponse
 
 
 class AuthService:
-    """Authentication service for handling JWT operations."""
+    """Authentication service for handling JWT operations and user management."""
+    
+    # In-memory user storage (replace with Firestore in production)
+    _users: Dict[str, UserModel] = {}
     
     # Role-based permissions mapping as specified in the requirements
     PERMISSIONS_MAP = {
-        "super_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]},
+        "super_admin": {"read": ["plots", "zones", "users"], "write": ["plots", "zones", "users"]},
         "zone_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]}, 
         "normal_user": {"read": ["plots", "zones"], "write": []}
     }
@@ -81,7 +85,7 @@ class AuthService:
             "exp": int(expiration.timestamp())
         }
         
-        # Sign the token
+        # Sign the token using HS256 with secret key
         token = jwt.encode(
             payload=payload,
             key=settings.JWT_SECRET_KEY,
@@ -102,6 +106,7 @@ class AuthService:
             Optional[JWTPayload]: Decoded payload if valid, None if invalid
         """
         try:
+            # For HS256, we use the same secret key for both signing and verification
             payload = jwt.decode(
                 jwt=token,
                 key=settings.JWT_SECRET_KEY,
@@ -122,3 +127,118 @@ class AuthService:
             int: Expiry time in seconds (24 hours = 86400 seconds)
         """
         return settings.JWT_EXPIRE_HOURS * 3600
+
+    # User Management Methods
+    
+    @classmethod
+    def create_user(cls, request: CreateUserRequest) -> Optional[UserResponse]:
+        """
+        Create a new user.
+        
+        Args:
+            request: User creation request
+            
+        Returns:
+            Optional[UserResponse]: Created user data or None if user exists
+        """
+        # Check if user already exists
+        if request.email in cls._users:
+            return None
+            
+        # Validate zone
+        if request.zone not in cls.VALID_ZONES:
+            raise ValueError(f"Invalid zone: {request.zone}")
+            
+        # Create user
+        now = datetime.utcnow()
+        user = UserModel(
+            email=request.email,
+            role=request.role,
+            zone=request.zone,
+            createdDate=now,
+            lastModified=now
+        )
+        
+        cls._users[request.email] = user
+        
+        return UserResponse(
+            email=user.email,
+            role=user.role,
+            zone=user.zone,
+            createdDate=user.createdDate,
+            lastModified=user.lastModified
+        )
+    
+    @classmethod
+    def update_user(cls, request: UpdateUserRequest) -> Optional[UserResponse]:
+        """
+        Update an existing user.
+        
+        Args:
+            request: User update request
+            
+        Returns:
+            Optional[UserResponse]: Updated user data or None if user not found
+        """
+        # Check if user exists
+        if request.email not in cls._users:
+            return None
+            
+        user = cls._users[request.email]
+        updated = False
+        
+        # Update role if provided
+        if request.role is not None:
+            user.role = request.role
+            updated = True
+            
+        # Update zone if provided
+        if request.zone is not None:
+            if request.zone not in cls.VALID_ZONES:
+                raise ValueError(f"Invalid zone: {request.zone}")
+            user.zone = request.zone
+            updated = True
+            
+        # Update lastModified if any changes were made
+        if updated:
+            user.lastModified = datetime.utcnow()
+            
+        return UserResponse(
+            email=user.email,
+            role=user.role,
+            zone=user.zone,
+            createdDate=user.createdDate,
+            lastModified=user.lastModified
+        )
+    
+    @classmethod
+    def get_user_by_email(cls, email: str) -> Optional[UserModel]:
+        """
+        Get user by email.
+        
+        Args:
+            email: User email
+            
+        Returns:
+            Optional[UserModel]: User data or None if not found
+        """
+        return cls._users.get(email.lower())
+    
+    @classmethod
+    def list_users(cls) -> List[UserResponse]:
+        """
+        List all users.
+        
+        Returns:
+            List[UserResponse]: List of all users
+        """
+        return [
+            UserResponse(
+                email=user.email,
+                role=user.role,
+                zone=user.zone,
+                createdDate=user.createdDate,
+                lastModified=user.lastModified
+            )
+            for user in cls._users.values()
+        ]

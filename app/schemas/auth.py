@@ -4,6 +4,7 @@ Authentication-related Pydantic schemas for request/response validation.
 from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Any, Optional
 from enum import Enum
+from datetime import datetime
 
 
 class UserRole(str, Enum):
@@ -119,4 +120,129 @@ class JWTPayload(BaseModel):
                 "iat": 1672531200,
                 "exp": 1672617600
             }
+        }
+
+
+class CreateUserRequest(BaseModel):
+    """
+    Request schema for POST /create_user endpoint (super_admin only).
+    
+    As per API specification:
+    - email: string, valid email format, mandatory
+    - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, mandatory (valid zone code)
+    """
+    email: str = Field(..., max_length=100, description="Valid email address")
+    role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
+    zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        """Validate email format."""
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "zone_admin",
+                "zone": "GSEZ"
+            }
+        }
+
+
+class UpdateUserRequest(BaseModel):
+    """
+    Request schema for PUT /update_user endpoint (super_admin only).
+    
+    As per API specification:
+    - email: string, valid email format, mandatory (identifier)
+    - role: string, max 20 chars, optional (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, optional (valid zone code)
+    """
+    email: str = Field(..., max_length=100, description="Valid email address of user to update")
+    role: Optional[UserRole] = Field(None, description="New user role: super_admin, zone_admin, or normal_user")
+    zone: Optional[str] = Field(None, max_length=10, description="New valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        """Validate email format."""
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if v and (not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6)):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "normal_user",
+                "zone": "OSEZ"
+            }
+        }
+
+
+class UserResponse(BaseModel):
+    """
+    Response schema for user operations.
+    
+    Returns user information after create/update operations.
+    """
+    email: str = Field(..., description="User email address")
+    role: UserRole = Field(..., description="User role")
+    zone: str = Field(..., description="User zone")
+    createdDate: datetime = Field(..., description="User creation timestamp")
+    lastModified: datetime = Field(..., description="Last modification timestamp")
+    
+    class Config:
+        """Pydantic configuration."""
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat()
+        }
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "zone_admin",
+                "zone": "GSEZ",
+                "createdDate": "2024-01-01T10:00:00Z",
+                "lastModified": "2024-01-01T10:00:00Z"
+            }
+        }
+
+
+class UserModel(BaseModel):
+    """
+    Internal user model for storage.
+    """
+    email: str
+    role: UserRole
+    zone: str
+    createdDate: datetime
+    lastModified: datetime
+    
+    class Config:
+        """Pydantic configuration."""
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat()
         }

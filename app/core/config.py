@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Application settings configuration."""
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-this-in-production"
+    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"
     JWT_ALGORITHM: str = "HS256" 
     JWT_EXPIRE_HOURS: int = 24
     

@@ -1,0 +1,3062 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+app/
+  api/
+    __init__.py
+    auth.py
+    plots.py
+    zones.py
+  core/
+    __init__.py
+    config.py
+  schemas/
+    __init__.py
+    auth.py
+    plots.py
+  services/
+    __init__.py
+    auth.py
+    firestore.py
+  utils/
+    __init__.py
+    auth.py
+  __init__.py
+  main.py
+.gitignore
+api_flow_diagram.mermaid
+api_specifications.md
+dev-requirements.txt
+README.md
+requirements-dev.txt
+requirements.txt
+setup_guide.md
+SETUP.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="README.md">
+# Arise Plot Management API
+
+A robust FastAPI backend for managing land plots and economic zones with JWT-based authentication and role-based access control.
+
+## 🚀 Features
+
+- **JWT Authentication** with role-based permissions
+- **Plot Management** (create, update, release, query)
+- **Zone Master Data** management
+- **Role-Based Access Control** (super_admin, zone_admin, normal_user)
+- **Auto-Generated API Documentation** (Swagger UI & ReDoc)
+- **Input Validation** with Pydantic schemas
+- **Mock Data Support** for development (Firestore ready)
+
+## 📋 Table of Contents
+
+- [Quick Start](#quick-start)
+- [API Endpoints](#api-endpoints)
+- [Authentication & Permissions](#authentication--permissions)
+- [Request/Response Schemas](#requestresponse-schemas)
+- [Development Setup](#development-setup)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Future Roadmap](#future-roadmap)
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Git
+
+### Installation
+```bash
+# Clone the repository
+git clone <repository-url>
+cd arise_fastapi
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Setup environment variables
+cp .env.example .env
+
+# Run the development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Access Documentation
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+## 📡 API Endpoints
+
+### Authentication
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/auth/token` | Generate JWT token | No |
+
+### Plot Management
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/plots/available` | Get available plots | Read plots |
+| PUT | `/api/v1/plots/update-plot` | Update plot allocation | Write plots |
+| PATCH | `/api/v1/plots/release-plot` | Release plot | Write plots |
+| GET | `/api/v1/plots/plot-details` | Get detailed plot info | Read plots |
+
+### Zone Management
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/country/zones` | Create zone master data | Write zones |
+
+## 🔐 Authentication & Permissions
+
+### User Roles
+- **super_admin**: Full access to all zones and operations
+- **zone_admin**: Access limited to assigned zone
+- **normal_user**: Read-only access to plots
+
+### Permission Matrix
+| Role | Read Plots | Write Plots | Read Zones | Write Zones |
+|------|------------|-------------|------------|-------------|
+| super_admin | ✅ All zones | ✅ All zones | ✅ All zones | ✅ All zones |
+| zone_admin | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone |
+| normal_user | ✅ All zones | ❌ | ✅ All zones | ❌ |
+
+### Authentication Flow
+1. **Request Token**: POST `/auth/token` with userId, role, zone
+2. **Get JWT**: Receive 24-hour JWT token
+3. **Use Token**: Include `Authorization: Bearer <token>` in requests
+4. **Access Control**: Automatic permission and zone validation
+
+## 📝 Request/Response Schemas
+
+### Authentication
+
+#### POST /auth/token
+**Request:**
+```json
+{
+  "userId": "admin001",
+  "role": "super_admin",
+  "zone": "GSEZ"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400
+}
+```
+
+**Error (400):**
+```json
+{
+  "error_code": "INVALID_ROLE",
+  "message": "Invalid role provided",
+  "details": {...}
+}
+```
+
+### Plot Management
+
+#### GET /plots/available
+**Query Parameters:**
+- `country` (optional): Filter by country
+- `zoneCode` (optional): Filter by zone
+- `category` (optional): Residential, Commercial, Industrial
+- `phase` (optional): Phase number
+
+**Response:**
+```json
+{
+  "plots": [
+    {
+      "plotName": "GSEZ-R-001",
+      "plotStatus": "Available",
+      "category": "Residential",
+      "phase": 1,
+      "areaInSqm": 5000.0,
+      "areaInHa": 0.5,
+      "zoneCode": "GSEZ",
+      "country": "Gabon"
+    }
+  ]
+}
+```
+
+#### PUT /plots/update-plot
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "GSEZ",
+  "phase": 1,
+  "plotName": "GSEZ-R-001",
+  "companyName": "TechCorp Ltd",
+  "sector": "Technology",
+  "plotStatus": "Allocated",
+  "activity": "Software Development",
+  "investmentAmount": 1000000,
+  "employmentGenerated": 50,
+  "allocatedDate": "2024-07-04",
+  "expiryDate": "2029-07-04"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Plot updated successfully",
+  "plotName": "GSEZ-R-001",
+  "status": "Allocated"
+}
+```
+
+#### PATCH /plots/release-plot
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "GSEZ",
+  "plotName": "GSEZ-R-001",
+  "plotStatus": "available"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Plot released successfully",
+  "plotName": "GSEZ-R-001",
+  "status": "available"
+}
+```
+
+#### GET /plots/plot-details
+**Query Parameters:**
+- `country` (required): Country name
+- `zoneCode` (required): Zone code
+
+**Response:**
+```json
+{
+  "metadata": {
+    "country": "Gabon",
+    "zoneCode": "GSEZ",
+    "totalPlots": 10,
+    "availablePlots": 7
+  },
+  "plots": [
+    {
+      "plotName": "GSEZ-R-001",
+      "category": "Residential",
+      "areaInHa": 0.5,
+      "sector": "Housing",
+      "activity": "Residential Development",
+      "plotStatus": "Available",
+      "companyName": null,
+      "allocatedDate": null,
+      "investmentAmount": null,
+      "employmentGenerated": null
+    }
+  ]
+}
+```
+
+### Zone Management
+
+#### POST /country/zones
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "NSEZ",
+  "phase": 1,
+  "landArea": 150.5,
+  "zoneName": "New Special Economic Zone",
+  "zoneType": "SEZ",
+  "establishedDate": "2024-07-04"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Zone data saved successfully",
+  "zoneCode": "NSEZ"
+}
+```
+
+## 🛠️ Development Setup
+
+### Project Structure
+```
+arise_fastapi/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI app entry point
+│   ├── api/                    # API routes
+│   │   ├── auth.py            # Authentication endpoints
+│   │   ├── plots.py           # Plot management endpoints
+│   │   └── zones.py           # Zone management endpoints
+│   ├── core/
+│   │   └── config.py          # Application settings
+│   ├── schemas/               # Pydantic models
+│   │   ├── auth.py           # Authentication schemas
+│   │   └── plots.py          # Plot/Zone schemas
+│   ├── services/              # Business logic
+│   │   ├── auth.py           # Authentication service
+│   │   └── firestore.py      # Database service
+│   └── utils/
+│       └── auth.py           # Authentication utilities
+├── requirements.txt           # Production dependencies
+├── requirements-dev.txt       # Development dependencies
+├── .env.example              # Environment template
+├── .gitignore               # Git ignore rules
+└── README.md                # This file
+```
+
+### Environment Variables
+Copy `.env.example` to `.env` and configure:
+
+- **JWT_SECRET_KEY**: Secret key for JWT signing
+- **JWT_ALGORITHM**: JWT algorithm (HS256)
+- **JWT_EXPIRE_HOURS**: Token expiry (24)
+- **FIREBASE_PROJECT_ID**: Firebase project ID
+- **APP_NAME**: Application name
+- **DEBUG**: Debug mode (True/False)
+
+### Code Quality
+```bash
+# Format code
+black app/
+
+# Sort imports
+isort app/
+
+# Lint code
+flake8 app/
+
+# Type checking (if mypy installed)
+mypy app/
+```
+
+## 🧪 Testing
+
+### Manual Testing with curl
+
+1. **Get JWT Token:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "admin001",
+    "role": "super_admin",
+    "zone": "GSEZ"
+  }'
+```
+
+2. **Test Protected Endpoint:**
+```bash
+curl -X GET "http://localhost:8000/api/v1/plots/available?country=Gabon" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Automated Testing
+```bash
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=app tests/
+```
+
+## 🚀 Deployment
+
+### Current Support
+- **Local Development**: uvicorn server
+- **Traditional Hosting**: Any Python-compatible hosting
+- **Docker**: Containerization ready
+
+### Future Deployment Options
+- **AWS Lambda**: Serverless deployment with Mangum
+- **AWS Elastic Beanstalk**: Platform-as-a-Service
+- **Vercel**: Serverless functions
+- **Railway**: Simple deployment platform
+- **Heroku**: Cloud platform
+
+## 🔮 Future Roadmap
+
+### Phase 1: Database Integration
+- [ ] Replace mock data with real Firestore integration
+- [ ] Add database connection pooling
+- [ ] Implement data persistence
+
+### Phase 2: API Enhancements
+- [ ] Unify PUT/PATCH endpoints for plot updates
+- [ ] Add bulk operations support
+- [ ] Implement pagination for large datasets
+- [ ] Add search and filtering capabilities
+
+### Phase 3: Security & Performance
+- [ ] Add rate limiting
+- [ ] Implement refresh tokens
+- [ ] Add request logging and monitoring
+- [ ] Performance optimization
+
+### Phase 4: Additional Features
+- [ ] Email notifications
+- [ ] File upload support
+- [ ] Advanced reporting
+- [ ] Multi-language support
+
+### Phase 5: Deployment & DevOps
+- [ ] Docker containerization
+- [ ] AWS Lambda deployment
+- [ ] CI/CD pipeline setup
+- [ ] Infrastructure as Code (Terraform)
+- [ ] Monitoring and alerting
+
+## 📊 Current Implementation Status
+
+### ✅ Completed Features
+- JWT-based authentication system
+- Role-based access control
+- Plot CRUD operations
+- Zone management
+- API documentation (Swagger/ReDoc)
+- Request/response validation
+- Error handling
+- Mock data service
+
+### 🔄 In Progress
+- Database integration planning
+- Deployment strategy
+
+### 📋 Pending
+- Real Firestore integration
+- Production deployment
+- Comprehensive testing suite
+- Performance optimization
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 📞 Support
+
+For questions or support, please contact the development team or create an issue in the repository.
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: July 4, 2025  
+**FastAPI Version**: 0.115.14  
+**Python Version**: 3.8+
+</file>
+
+<file path="app/api/__init__.py">
+# API package
+</file>
+
+<file path="app/api/auth.py">
+"""
+Authentication API routes for JWT token generation.
+Implements POST /auth/token endpoint as per Flow 1 specifications.
+"""
+from fastapi import APIRouter, HTTPException, status
+from app.schemas.auth import AuthTokenRequest, AuthTokenResponse, AuthErrorResponse
+from app.services.auth import AuthService
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+@router.post(
+    "/token",
+    response_model=AuthTokenResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "model": AuthErrorResponse,
+            "description": "Bad Request - Invalid parameters"
+        }
+    },
+    summary="Generate JWT Token",
+    description="""
+    Generate a JWT token for authenticated API access.
+    
+    **Flow 1: Authentication & Token Generation**
+    
+    This endpoint validates user credentials and returns a signed JWT token containing:
+    - User identity (userId, role, zone)
+    - Role-based permissions (read/write access)
+    - Token expiration (24 hours)
+    
+    **Role-based Permissions:**
+    - `super_admin`: Full read/write access to all zones
+    - `zone_admin`: Read/write access to assigned zone only  
+    - `normal_user`: Read-only access to plots
+    
+    **Valid Zone Codes:** GSEZ, OSEZ, GABON (4-6 uppercase letters)
+    """
+)
+async def create_access_token(request: AuthTokenRequest) -> AuthTokenResponse:
+    """
+    Create JWT access token for API authentication.
+    
+    **Sequence of Events:**
+    1. Validate request parameters (userId, role, zone)
+    2. Check role validity (super_admin, zone_admin, normal_user)
+    3. Assign role-based permissions
+    4. Create signed JWT token with 24-hour expiry
+    5. Return token response
+    
+    Args:
+        request: Authentication request with userId, role, and zone
+        
+    Returns:
+        AuthTokenResponse: JWT token with expiry information
+        
+    Raises:
+        HTTPException: 400 Bad Request for validation errors
+    """
+    
+    # Step 1: Validate request parameters
+    validation_error = AuthService.validate_request(request)
+    
+    if validation_error == "INVALID_ROLE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_ROLE",
+                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
+                "details": {"provided_role": request.role.value}
+            }
+        )
+    
+    if validation_error == "INVALID_ZONE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_ZONE", 
+                "message": "Invalid zone code. Must be a valid zone identifier (e.g., GSEZ, OSEZ)",
+                "details": {"provided_zone": request.zone}
+            }
+        )
+    
+    # Step 2: Create JWT token with permissions
+    try:
+        access_token = AuthService.create_jwt_token(request)
+        expires_in = AuthService.get_token_expiry_seconds()
+        
+        return AuthTokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=expires_in
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "Failed to create access token",
+                "details": {"error": str(e)}
+            }
+        )
+</file>
+
+<file path="app/api/plots.py">
+"""
+Plots API routes for plot management operations.
+Implements all plot-related endpoints as per API specifications.
+"""
+from fastapi import APIRouter, Depends, Query, HTTPException, status
+from typing import Optional
+from app.schemas.plots import (
+    AvailablePlotsResponse, PlotQueryParams,
+    PlotUpdateRequest, PlotUpdateResponse,
+    PlotReleaseRequest, PlotReleaseResponse,
+    PlotDetailsQueryParams, PlotDetailsResponse
+)
+from app.schemas.auth import JWTPayload
+from app.utils.auth import require_plots_read, require_plots_write
+from app.services.firestore import FirestoreService
+
+router = APIRouter(prefix="/plots", tags=["Plots"])
+firestore_service = FirestoreService()
+
+
+@router.get(
+    "/available",
+    response_model=AvailablePlotsResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {
+            "description": "Unauthorized - Invalid or expired JWT token"
+        },
+        403: {
+            "description": "Forbidden - Insufficient permissions"
+        }
+    },
+    summary="Get Available Plots",
+    description="""
+    Retrieve available plots with optional filtering.
+    
+    **Flow 2: Available Plots Retrieval**
+    
+    This endpoint implements the complete flow from the diagram:
+    1. **JWT Token Verification**: Validates Bearer token
+    2. **Permission Check**: Ensures user has 'read' permission for plots
+    3. **Role-Based Filtering**: 
+       - `zone_admin`: Only sees plots in their assigned zone
+       - `super_admin`/`normal_user`: Sees all plots (subject to query filters)
+    4. **Query Filtering**: Apply optional filters (country, zoneCode, category, phase)
+    5. **Firestore Query**: Retrieve matching plots from database
+    6. **Response Formatting**: Return structured plot data
+    
+    **Query Parameters** (all optional):
+    - `country`: Filter by country name
+    - `zoneCode`: Filter by zone code (4-6 uppercase letters)
+    - `category`: Filter by plot category (Residential, Commercial, Industrial)
+    - `phase`: Filter by phase number (positive integer)
+    
+    **Role-Based Access**:
+    - All roles need 'read' permission for plots
+    - Zone admins automatically filtered to their assigned zone
+    - Super admins and normal users see all zones (unless filtered)
+    """
+)
+async def get_available_plots(
+    country: Optional[str] = Query(None, max_length=50, description="Filter by country name"),
+    zoneCode: Optional[str] = Query(None, max_length=10, description="Filter by zone code"),  
+    category: Optional[str] = Query(None, description="Filter by category: Residential, Commercial, Industrial"),
+    phase: Optional[int] = Query(None, ge=1, description="Filter by phase number"),
+    user: JWTPayload = Depends(require_plots_read)
+) -> AvailablePlotsResponse:
+    """
+    Get available plots with filtering and role-based access control.
+    
+    **Sequence of Events (as per flowchart):**
+    1. Verify JWT Token ✓ (handled by dependency)
+    2. Extract User Payload ✓ (handled by dependency) 
+    3. Check Read Permission ✓ (handled by dependency)
+    4. Build Query Parameters
+    5. Apply Role-Based Filtering
+    6. Query Firestore Database
+    7. Format and Return Response
+    
+    Args:
+        country: Optional country filter
+        zoneCode: Optional zone code filter
+        category: Optional category filter  
+        phase: Optional phase filter
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        AvailablePlotsResponse: List of available plots
+        
+    Raises:
+        HTTPException: 401/403 for auth errors (handled by dependencies)
+    """
+    
+    # Step 4: Build Query Parameters
+    # Validate category if provided
+    valid_categories = ["Residential", "Commercial", "Industrial"]
+    if category and category not in valid_categories:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_CATEGORY",
+                "message": f"Invalid category. Must be one of: {', '.join(valid_categories)}",
+                "details": {"provided_category": category}
+            }
+        )
+    
+    # Convert category string to enum if provided
+    category_enum = None
+    if category:
+        from app.schemas.plots import PlotCategory
+        category_enum = PlotCategory(category)
+    
+    # Create query parameters object
+    query_params = PlotQueryParams(
+        country=country,
+        zoneCode=zoneCode,
+        category=category_enum,
+        phase=phase
+    )
+    
+    # Step 5: Apply Role-Based Filtering (as per flowchart)
+    is_zone_admin = user.role == "zone_admin"
+    user_zone = user.zone if is_zone_admin else None
+    
+    # Step 6: Query Firestore Database
+    try:
+        plots = firestore_service.get_available_plots(
+            query_params=query_params,
+            user_zone=user_zone,
+            is_zone_admin=is_zone_admin
+        )
+        
+        # Step 7: Format and Return Response
+        return AvailablePlotsResponse(plots=plots)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "Failed to retrieve plots",
+                "details": {"error": str(e)}
+            }
+        )
+
+
+@router.put(
+    "/update-plot",
+    response_model=PlotUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Unauthorized - Invalid or expired JWT token"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+        404: {"description": "Plot not found"}
+    },
+    summary="Update Plot Information",
+    description="""
+    Update plot information with complete business allocation details.
+    
+    **Logic**: Complete resource update (PUT semantics) for plot allocation.
+    Used when allocating a plot to a company with full business details.
+    
+    **Role-Based Access**:
+    - Requires 'write' permission for plots
+    - Zone admins can only update plots in their assigned zone
+    - Super admins can update plots in any zone
+    
+    **Business Validation**:
+    - Plot must exist in specified country and zone
+    - Zone access enforced for zone_admin role
+    - All optional business fields can be updated
+    """
+)
+async def update_plot(
+    request: PlotUpdateRequest,
+    user: JWTPayload = Depends(require_plots_write)
+) -> PlotUpdateResponse:
+    """
+    Update plot information with business allocation details.
+    
+    Args:
+        request: Plot update request with all business details
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        PlotUpdateResponse: Success response with plot details
+        
+    Raises:
+        HTTPException: 404 if plot not found, 403 if zone access denied
+    """
+    try:
+        user_zone = user.zone if user.role == "zone_admin" else None
+        result = await firestore_service.update_plot(request, user_zone)
+        return PlotUpdateResponse(**result)
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "PLOT_NOT_FOUND",
+                "message": str(e)
+            }
+        )
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "FORBIDDEN",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An internal server error occurred"
+            }
+        )
+
+
+@router.patch(
+    "/release-plot", 
+    response_model=PlotReleaseResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Unauthorized - Invalid or expired JWT token"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+        404: {"description": "Plot not found"}
+    },
+    summary="Release Plot",
+    description="""
+    Release a plot by setting status to available and clearing allocation data.
+    
+    **Logic**: Partial resource update (PATCH semantics) for plot release.
+    Different from PUT /update-plot - only changes status and clears business data.
+    
+    **Why PATCH vs PUT?**:
+    - PATCH: Partial update - only changes plot status to available
+    - PUT: Complete update - updates full business allocation details
+    - Different business logic and validation requirements
+    
+    **Role-Based Access**:
+    - Requires 'write' permission for plots  
+    - Zone admins can only release plots in their assigned zone
+    - Super admins can release plots in any zone
+    """
+)
+async def release_plot(
+    request: PlotReleaseRequest,
+    user: JWTPayload = Depends(require_plots_write)
+) -> PlotReleaseResponse:
+    """
+    Release a plot by setting status to available.
+    
+    Args:
+        request: Plot release request with minimal required fields
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        PlotReleaseResponse: Success response with plot details
+        
+    Raises:
+        HTTPException: 404 if plot not found, 403 if zone access denied
+    """
+    try:
+        user_zone = user.zone if user.role == "zone_admin" else None
+        result = await firestore_service.release_plot(request, user_zone)
+        return PlotReleaseResponse(**result)
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "PLOT_NOT_FOUND", 
+                "message": str(e)
+            }
+        )
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "FORBIDDEN",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An internal server error occurred"
+            }
+        )
+
+
+@router.get(
+    "/plot-details",
+    response_model=PlotDetailsResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Unauthorized - Invalid or expired JWT token"},
+        403: {"description": "Forbidden - Insufficient permissions"}
+    },
+    summary="Get Plot Details",
+    description="""
+    Get detailed plot information for a specific zone.
+    
+    **Logic**: Returns comprehensive plot data including business allocation details.
+    Provides metadata with summary statistics and detailed plot information.
+    
+    **Role-Based Access**:
+    - Requires 'read' permission for plots
+    - Zone admins can only access plots in their assigned zone
+    - Super admins and normal users can access plots in any zone
+    
+    **Response Format**:
+    - metadata: Summary statistics (total plots, available plots)
+    - plots: Array of detailed plot information with business data
+    """
+)
+async def get_plot_details(
+    country: str = Query(..., max_length=50, description="Country name"),
+    zoneCode: str = Query(..., max_length=10, description="Zone code"),
+    user: JWTPayload = Depends(require_plots_read)
+) -> PlotDetailsResponse:
+    """
+    Get detailed plot information for a specific zone.
+    
+    Args:
+        country: Country name (required)
+        zoneCode: Zone code (required)
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        PlotDetailsResponse: Detailed plot information with metadata
+        
+    Raises:
+        HTTPException: 403 if zone access denied
+    """
+    try:
+        params = PlotDetailsQueryParams(country=country, zoneCode=zoneCode)
+        user_zone = user.zone if user.role == "zone_admin" else None
+        result = await firestore_service.get_plot_details(params, user_zone)
+        return result
+    
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "FORBIDDEN",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An internal server error occurred"
+            }
+        )
+</file>
+
+<file path="app/api/zones.py">
+"""
+Zones API routes for zone master data management.
+Implements POST /country/zones endpoint as per API specifications.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.schemas.plots import ZoneCreateRequest, ZoneCreateResponse
+from app.schemas.auth import JWTPayload
+from app.utils.auth import require_zones_write
+from app.services.firestore import FirestoreService
+
+router = APIRouter(prefix="/country", tags=["Zones"])
+firestore_service = FirestoreService()
+
+
+@router.post(
+    "/zones",
+    response_model=ZoneCreateResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Unauthorized - Invalid or expired JWT token"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+        409: {"description": "Zone code already exists"}
+    },
+    summary="Create Zone Master Data",
+    description="""
+    Create or update zone master data for economic zones.
+    
+    **Logic**: Essential for establishing economic zones before creating plots.
+    Zone master data provides the foundation for plot management within zones.
+    
+    **Role-Based Access**:
+    - Requires 'write' permission for zones
+    - Only super_admin and zone_admin can create zones
+    - Zone admins typically create zones for their assigned areas
+    
+    **Business Validation**:
+    - Zone code must be unique across the system
+    - Zone code format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
+    - Zone type must be one of: SEZ, Industrial, Commercial
+    - Land area must be positive value in hectares
+    
+    **Use Cases**:
+    - Setting up new economic zones
+    - Updating zone information
+    - Preparing infrastructure for plot allocation
+    """
+)
+async def create_zone(
+    request: ZoneCreateRequest,
+    user: JWTPayload = Depends(require_zones_write)
+) -> ZoneCreateResponse:
+    """
+    Create or update zone master data.
+    
+    Args:
+        request: Zone creation request with zone details
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        ZoneCreateResponse: Success response with zone code
+        
+    Raises:
+        HTTPException: 409 if zone exists, 400 for validation errors
+    """
+    try:
+        result = await firestore_service.create_zone(request)
+        return ZoneCreateResponse(**result)
+    
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": "ZONE_EXISTS",
+                    "message": str(e),
+                    "details": {
+                        "zone_code": request.zoneCode,
+                        "country": request.country
+                    }
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error_code": "INVALID_DATA",
+                    "message": str(e)
+                }
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An internal server error occurred"
+            }
+        )
+</file>
+
+<file path="app/core/__init__.py">
+# Core package
+</file>
+
+<file path="app/core/config.py">
+"""
+Application configuration settings using Pydantic Settings.
+"""
+from pydantic_settings import BaseSettings
+from typing import List
+import os
+
+
+class Settings(BaseSettings):
+    """Application settings configuration."""
+    
+    # JWT Configuration
+    JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-this-in-production"
+    JWT_ALGORITHM: str = "HS256" 
+    JWT_EXPIRE_HOURS: int = 24
+    
+    # Firebase Configuration
+    FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
+    FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
+    FIREBASE_PRIVATE_KEY: str = ""
+    FIREBASE_CLIENT_EMAIL: str = ""
+    FIREBASE_CLIENT_ID: str = ""
+    FIREBASE_AUTH_URI: str = "https://accounts.google.com/o/oauth2/auth"
+    FIREBASE_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
+    FIREBASE_AUTH_PROVIDER_X509_CERT_URL: str = "https://www.googleapis.com/oauth2/v1/certs"
+    FIREBASE_CLIENT_X509_CERT_URL: str = ""
+    
+    # Application Settings
+    APP_NAME: str = "Arise Plot Management API"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = True
+    ENVIRONMENT: str = "development"
+    
+    # API Configuration
+    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "Arise FastAPI Backend"
+    
+    # CORS Settings
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:8080", 
+        "http://localhost:3001"
+    ]
+    
+    # Database Settings
+    DATABASE_URL: str = "firestore"
+    FIRESTORE_COLLECTION_PLOTS: str = "plots"
+    FIRESTORE_COLLECTION_ZONES: str = "zones"
+    FIRESTORE_COLLECTION_USERS: str = "users"
+    
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+
+# Global settings instance
+settings = Settings()
+</file>
+
+<file path="app/schemas/__init__.py">
+# Schemas package
+</file>
+
+<file path="app/schemas/auth.py">
+"""
+Authentication-related Pydantic schemas for request/response validation.
+"""
+from pydantic import BaseModel, Field, validator
+from typing import Dict, List, Any, Optional
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    """Valid user roles as per API specification."""
+    SUPER_ADMIN = "super_admin"
+    ZONE_ADMIN = "zone_admin"
+    NORMAL_USER = "normal_user"
+
+
+class AuthTokenRequest(BaseModel):
+    """
+    Request schema for POST /auth/token endpoint.
+    
+    As per API specification:
+    - userId: string, max 50 chars, mandatory
+    - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, mandatory (valid zone code)
+    """
+    userId: str = Field(..., max_length=50, description="Valid user identifier")
+    role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
+    zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "userId": "user_001",
+                "role": "zone_admin",
+                "zone": "GSEZ"
+            }
+        }
+
+
+class AuthTokenResponse(BaseModel):
+    """
+    Successful response schema for POST /auth/token endpoint.
+    
+    As per API specification:
+    - access_token: string, max 500 chars, mandatory (JWT token)
+    - token_type: string, max 10 chars, mandatory (always "bearer")
+    - expires_in: integer, mandatory (86400 seconds for 24 hours)
+    """
+    access_token: str = Field(..., max_length=500, description="JWT token with 24-hour expiry")
+    token_type: str = Field(default="bearer", max_length=10, description="Always 'bearer'")
+    expires_in: int = Field(..., description="Token expiry time in seconds (86400)")
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer", 
+                "expires_in": 86400
+            }
+        }
+
+
+class AuthErrorResponse(BaseModel):
+    """
+    Error response schema for authentication failures.
+    
+    As per API specification:
+    - error_code: string, max 50 chars, mandatory
+    - message: string, max 200 chars, mandatory  
+    - details: object, optional
+    """
+    error_code: str = Field(..., max_length=50, description="Error code identifier")
+    message: str = Field(..., max_length=200, description="Human-readable error description")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "error_code": "INVALID_ROLE",
+                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
+                "details": {"provided_role": "invalid_role"}
+            }
+        }
+
+
+class JWTPayload(BaseModel):
+    """
+    JWT token payload structure.
+    
+    Internal model for JWT token creation and validation.
+    """
+    userId: str
+    role: UserRole
+    zone: str
+    permissions: Dict[str, List[str]]
+    iat: int  # Issued at time
+    exp: int  # Expiration time
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "userId": "user_001",
+                "role": "zone_admin",
+                "zone": "GSEZ",
+                "permissions": {
+                    "read": ["plots", "zones"],
+                    "write": ["plots", "zones"]
+                },
+                "iat": 1672531200,
+                "exp": 1672617600
+            }
+        }
+</file>
+
+<file path="app/schemas/plots.py">
+"""
+Plot-related Pydantic schemas for request/response validation.
+Based on API specifications for plots endpoints.
+"""
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional
+from decimal import Decimal
+from datetime import date
+from enum import Enum
+
+
+class PlotCategory(str, Enum):
+    """Valid plot categories as per API specification."""
+    RESIDENTIAL = "Residential"
+    COMMERCIAL = "Commercial" 
+    INDUSTRIAL = "Industrial"
+
+
+class PlotStatus(str, Enum):
+    """Valid plot status values as per API specification."""
+    AVAILABLE = "Available"
+    ALLOCATED = "Allocated"
+    RESERVED = "Reserved"
+
+
+class PlotResponse(BaseModel):
+    """
+    Individual plot response schema for GET /plots/available endpoint.
+    
+    As per API specification:
+    - All fields are mandatory in response
+    - Matches the format specified in flowchart
+    """
+    plotName: str = Field(..., max_length=50, description="Unique plot identifier")
+    plotStatus: PlotStatus = Field(..., description="Available, Allocated, Reserved")
+    category: PlotCategory = Field(..., description="Residential, Commercial, Industrial")
+    phase: int = Field(..., description="Phase number")
+    areaInSqm: Decimal = Field(..., description="Area in square meters")
+    areaInHa: Decimal = Field(..., description="Area in hectares")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    country: str = Field(..., max_length=50, description="Country name")
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "plotName": "GSEZ-RES-001",
+                "plotStatus": "Available",
+                "category": "Residential", 
+                "phase": 1,
+                "areaInSqm": 1000.00,
+                "areaInHa": 0.10,
+                "zoneCode": "GSEZ",
+                "country": "Gabon"
+            }
+        }
+
+
+class AvailablePlotsResponse(BaseModel):
+    """
+    Response schema for GET /plots/available endpoint.
+    
+    As per API specification:
+    - plots: array of plot objects, mandatory
+    """
+    plots: List[PlotResponse] = Field(..., description="Array of plot objects")
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "plots": [
+                    {
+                        "plotName": "GSEZ-RES-001",
+                        "plotStatus": "Available",
+                        "category": "Residential",
+                        "phase": 1,
+                        "areaInSqm": 1000.00,
+                        "areaInHa": 0.10,
+                        "zoneCode": "GSEZ",
+                        "country": "Gabon"
+                    },
+                    {
+                        "plotName": "GSEZ-COM-002", 
+                        "plotStatus": "Available",
+                        "category": "Commercial",
+                        "phase": 2,
+                        "areaInSqm": 2500.50,
+                        "areaInHa": 0.25,
+                        "zoneCode": "GSEZ",
+                        "country": "Gabon"
+                    }
+                ]
+            }
+        }
+
+
+class PlotQueryParams(BaseModel):
+    """
+    Query parameters for GET /plots/available endpoint.
+    
+    As per API specification:
+    - All parameters are optional
+    - Used for filtering plots
+    """
+    country: Optional[str] = Field(None, max_length=50, description="Filter by country name")
+    zoneCode: Optional[str] = Field(None, max_length=10, description="Filter by zone code")
+    category: Optional[PlotCategory] = Field(None, description="Filter by plot category")
+    phase: Optional[int] = Field(None, ge=1, description="Filter by phase number (positive integer)")
+
+    @validator('zoneCode')
+    def validate_zone_code(cls, v):
+        """Validate zone code format if provided."""
+        if v and (not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6)):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "country": "Gabon",
+                "zoneCode": "GSEZ", 
+                "category": "Residential",
+                "phase": 2
+            }
+        }
+
+
+class PlotUpdateRequest(BaseModel):
+    """
+    Request schema for PUT /update-plot endpoint.
+    
+    Logic: Complete plot update with business allocation details.
+    Used when allocating a plot to a company with full information.
+    """
+    country: str = Field(..., max_length=50, description="Country name")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    phase: int = Field(..., gt=0, description="Phase number (positive integer)")
+    plotName: str = Field(..., max_length=50, description="Plot identifier")
+    companyName: Optional[str] = Field(None, max_length=100, description="Company name for allocation")
+    sector: Optional[str] = Field(None, max_length=50, description="Business sector")
+    plotStatus: PlotStatus = Field(..., description="Plot status")
+    activity: Optional[str] = Field(None, max_length=100, description="Business activity description")
+    investmentAmount: Optional[float] = Field(None, ge=0, description="Investment amount in USD")
+    employmentGenerated: Optional[int] = Field(None, ge=0, description="Number of jobs created")
+    allocatedDate: Optional[date] = Field(None, description="Allocation date (YYYY-MM-DD)")
+    expiryDate: Optional[date] = Field(None, description="Expiry date (YYYY-MM-DD)")
+
+    @validator('zoneCode')
+    def validate_zone_code(cls, v):
+        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
+            raise ValueError('Zone code must be 4-6 uppercase letters')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "country": "Gabon",
+                "zoneCode": "GSEZ",
+                "phase": 1,
+                "plotName": "GSEZ-R-001",
+                "companyName": "TechCorp Ltd",
+                "sector": "Technology",
+                "plotStatus": "Allocated",
+                "activity": "Software Development",
+                "investmentAmount": 1000000.0,
+                "employmentGenerated": 50,
+                "allocatedDate": "2024-07-04",
+                "expiryDate": "2029-07-04"
+            }
+        }
+
+
+class PlotUpdateResponse(BaseModel):
+    """Response schema for PUT /update-plot endpoint."""
+    message: str = Field(..., max_length=100)
+    plotName: str = Field(..., max_length=50)
+    status: str = Field(..., max_length=20)
+
+
+class PlotReleaseRequest(BaseModel):
+    """
+    Request schema for PATCH /release-plot endpoint.
+    
+    Logic: Minimal request for releasing a plot back to available status.
+    Different from PUT because it only changes status, doesn't update business details.
+    """
+    country: str = Field(..., max_length=50, description="Country name")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    plotName: str = Field(..., max_length=50, description="Plot identifier")
+    plotStatus: str = Field(..., description="Must be 'available'")
+
+    @validator('plotStatus')
+    def validate_plot_status(cls, v):
+        if v.lower() != 'available':
+            raise ValueError('Plot status must be "available" for release operation')
+        return v.lower()
+
+    @validator('zoneCode')
+    def validate_zone_code(cls, v):
+        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
+            raise ValueError('Zone code must be 4-6 uppercase letters')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "country": "Gabon",
+                "zoneCode": "GSEZ",
+                "plotName": "GSEZ-C-002",
+                "plotStatus": "available"
+            }
+        }
+
+
+class PlotReleaseResponse(BaseModel):
+    """Response schema for PATCH /release-plot endpoint."""
+    message: str = Field(..., max_length=100)
+    plotName: str = Field(..., max_length=50)
+    status: str = Field(..., max_length=20)
+
+
+class ZoneCreateRequest(BaseModel):
+    """
+    Request schema for POST /country/zones endpoint.
+    
+    Logic: Creates or updates zone master data.
+    Essential for establishing economic zones before creating plots.
+    """
+    country: str = Field(..., max_length=50, description="Country name")
+    zoneCode: str = Field(..., max_length=10, description="Unique zone identifier")
+    phase: int = Field(..., gt=0, description="Phase number (positive integer)")
+    landArea: float = Field(..., gt=0, description="Total land area in hectares")
+    zoneName: Optional[str] = Field(None, max_length=100, description="Descriptive zone name")
+    zoneType: Optional[str] = Field(None, max_length=30, description="SEZ, Industrial, Commercial")
+    establishedDate: Optional[date] = Field(None, description="Establishment date (YYYY-MM-DD)")
+
+    @validator('zoneCode')
+    def validate_zone_code(cls, v):
+        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
+            raise ValueError('Zone code must be 4-6 uppercase letters')
+        return v
+
+    @validator('zoneType')
+    def validate_zone_type(cls, v):
+        if v and v not in ['SEZ', 'Industrial', 'Commercial']:
+            raise ValueError('Zone type must be one of: SEZ, Industrial, Commercial')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "country": "Gabon",
+                "zoneCode": "NSEZ",
+                "phase": 1,
+                "landArea": 150.5,
+                "zoneName": "New Special Economic Zone",
+                "zoneType": "SEZ",
+                "establishedDate": "2024-07-04"
+            }
+        }
+
+
+class ZoneCreateResponse(BaseModel):
+    """Response schema for POST /country/zones endpoint."""
+    message: str = Field(..., max_length=100)
+    zoneCode: str = Field(..., max_length=10)
+
+
+class PlotDetailsMetadata(BaseModel):
+    """
+    Metadata section for plot details response.
+    
+    Logic: Provides summary statistics for the requested zone.
+    """
+    country: str = Field(..., max_length=50)
+    zoneCode: str = Field(..., max_length=10)
+    totalPlots: int = Field(..., ge=0)
+    availablePlots: int = Field(..., ge=0)
+
+
+class PlotDetailsItem(BaseModel):
+    """
+    Individual plot item for plot details response.
+    
+    Logic: More detailed information than basic plot response,
+    includes business and allocation details.
+    """
+    plotName: str = Field(..., max_length=50)
+    category: PlotCategory
+    areaInHa: float = Field(..., gt=0)
+    sector: Optional[str] = Field(None, max_length=50)
+    activity: Optional[str] = Field(None, max_length=100)
+    plotStatus: PlotStatus
+    companyName: Optional[str] = Field(None, max_length=100)
+    allocatedDate: Optional[date] = None
+    investmentAmount: Optional[float] = Field(None, ge=0)
+    employmentGenerated: Optional[int] = Field(None, ge=0)
+
+
+class PlotDetailsQueryParams(BaseModel):
+    """
+    Query parameters for GET /plot-details endpoint.
+    
+    Logic: Simple country and zone filter for detailed plot information.
+    """
+    country: str = Field(..., max_length=50, description="Country name")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
+
+    @validator('zoneCode')
+    def validate_zone_code(cls, v):
+        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
+            raise ValueError('Zone code must be 4-6 uppercase letters')
+        return v
+
+
+class PlotDetailsResponse(BaseModel):
+    """Response schema for GET /plot-details endpoint."""
+    metadata: PlotDetailsMetadata
+    plots: List[PlotDetailsItem]
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "metadata": {
+                    "country": "Gabon",
+                    "zoneCode": "GSEZ",
+                    "totalPlots": 10,
+                    "availablePlots": 7
+                },
+                "plots": [
+                    {
+                        "plotName": "GSEZ-R-001",
+                        "category": "Residential",
+                        "areaInHa": 0.5,
+                        "sector": "Housing",
+                        "activity": None,
+                        "plotStatus": "Available",
+                        "companyName": None,
+                        "allocatedDate": None,
+                        "investmentAmount": None,
+                        "employmentGenerated": None
+                    }
+                ]
+            }
+        }
+</file>
+
+<file path="app/services/__init__.py">
+# Services package
+</file>
+
+<file path="app/services/auth.py">
+"""
+Authentication service for JWT token creation and validation.
+Implements the exact logic as specified in Flow 1 requirements.
+"""
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+import jwt
+from app.core.config import settings
+from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest
+
+
+class AuthService:
+    """Authentication service for handling JWT operations."""
+    
+    # Role-based permissions mapping as specified in the requirements
+    PERMISSIONS_MAP = {
+        "super_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]},
+        "zone_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]}, 
+        "normal_user": {"read": ["plots", "zones"], "write": []}
+    }
+    
+    # Valid zone codes (can be extended based on requirements)
+    VALID_ZONES = ["GSEZ", "OSEZ", "GABON", "TEST"]
+    
+    @classmethod
+    def validate_request(cls, request: AuthTokenRequest) -> Optional[str]:
+        """
+        Validate authentication request parameters.
+        
+        Returns:
+            Optional[str]: Error code if validation fails, None if valid
+        """
+        # Check if role is valid (already validated by Pydantic enum)
+        if request.role not in [role.value for role in UserRole]:
+            return "INVALID_ROLE"
+            
+        # Check if zone is valid
+        if request.zone not in cls.VALID_ZONES:
+            return "INVALID_ZONE"
+            
+        return None
+    
+    @classmethod
+    def get_permissions_for_role(cls, role: str) -> Dict[str, List[str]]:
+        """
+        Get permissions based on user role.
+        
+        Args:
+            role: User role (super_admin, zone_admin, normal_user)
+            
+        Returns:
+            Dict[str, List[str]]: Permissions dictionary
+        """
+        return cls.PERMISSIONS_MAP.get(role, {"read": [], "write": []})
+    
+    @classmethod
+    def create_jwt_token(cls, request: AuthTokenRequest) -> str:
+        """
+        Create JWT token with user information and permissions.
+        
+        Args:
+            request: Validated authentication request
+            
+        Returns:
+            str: Signed JWT token
+        """
+        # Current time and expiration
+        now = datetime.utcnow()
+        expiration = now + timedelta(hours=settings.JWT_EXPIRE_HOURS)
+        
+        # Get permissions for the role
+        permissions = cls.get_permissions_for_role(request.role.value)
+        
+        # Create JWT payload
+        payload = {
+            "userId": request.userId,
+            "role": request.role.value,
+            "zone": request.zone,
+            "permissions": permissions,
+            "iat": int(now.timestamp()),
+            "exp": int(expiration.timestamp())
+        }
+        
+        # Sign the token
+        token = jwt.encode(
+            payload=payload,
+            key=settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM
+        )
+        
+        return token
+    
+    @classmethod
+    def verify_jwt_token(cls, token: str) -> Optional[JWTPayload]:
+        """
+        Verify and decode JWT token.
+        
+        Args:
+            token: JWT token string
+            
+        Returns:
+            Optional[JWTPayload]: Decoded payload if valid, None if invalid
+        """
+        try:
+            payload = jwt.decode(
+                jwt=token,
+                key=settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM]
+            )
+            return JWTPayload(**payload)
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
+    
+    @classmethod
+    def get_token_expiry_seconds(cls) -> int:
+        """
+        Get token expiry time in seconds.
+        
+        Returns:
+            int: Expiry time in seconds (24 hours = 86400 seconds)
+        """
+        return settings.JWT_EXPIRE_HOURS * 3600
+</file>
+
+<file path="app/services/firestore.py">
+"""
+Firestore database service for plot and zone data management.
+Currently uses mock data - will be replaced with actual Firestore integration.
+"""
+from typing import List, Dict, Any, Optional
+from decimal import Decimal
+from datetime import datetime, date
+from app.schemas.plots import (
+    PlotResponse, PlotQueryParams, PlotCategory, PlotStatus,
+    PlotUpdateRequest, PlotReleaseRequest, ZoneCreateRequest,
+    PlotDetailsQueryParams, PlotDetailsResponse, PlotDetailsMetadata, PlotDetailsItem
+)
+
+
+class FirestoreService:
+    """
+    Service for Firestore database operations.
+    Currently uses mock data for development/testing.
+    
+    Logic: Maintains separate collections for plots and zones,
+    with role-based access control for data operations.
+    """
+    
+    def __init__(self):
+        """Initialize with mock data collections"""
+        # Mock plot data - simulates Firestore plots collection
+        self.plots_data = [
+            {
+                "plotName": "GSEZ-R-001",
+                "plotStatus": "Available",
+                "category": "Residential",
+                "phase": 1,
+                "areaInSqm": 5000.0,
+                "areaInHa": 0.5,
+                "zoneCode": "GSEZ",
+                "country": "Gabon",
+                "sector": "Housing",
+                "activity": "Residential Development",
+                "companyName": None,
+                "allocatedDate": None,
+                "expiryDate": None,
+                "investmentAmount": None,
+                "employmentGenerated": None
+            },
+            {
+                "plotName": "GSEZ-C-002",
+                "plotStatus": "Allocated",
+                "category": "Commercial",
+                "phase": 1,
+                "areaInSqm": 10000.0,
+                "areaInHa": 1.0,
+                "zoneCode": "GSEZ",
+                "country": "Gabon",
+                "sector": "Technology",
+                "activity": "Software Development",
+                "companyName": "TechCorp Ltd",
+                "allocatedDate": "2024-01-15",
+                "expiryDate": "2029-01-15",
+                "investmentAmount": 500000.0,
+                "employmentGenerated": 25
+            },
+            {
+                "plotName": "OSEZ-I-001",
+                "plotStatus": "Available",
+                "category": "Industrial",
+                "phase": 2,
+                "areaInSqm": 20000.0,
+                "areaInHa": 2.0,
+                "zoneCode": "OSEZ",
+                "country": "Gabon",
+                "sector": "Manufacturing",
+                "activity": None,
+                "companyName": None,
+                "allocatedDate": None,
+                "expiryDate": None,
+                "investmentAmount": None,
+                "employmentGenerated": None
+            }
+        ]
+        
+        # Mock zone data - simulates Firestore zones collection
+        self.zones_data = [
+            {
+                "country": "Gabon",
+                "zoneCode": "GSEZ",
+                "phase": 1,
+                "landArea": 100.5,
+                "zoneName": "Gabon Special Economic Zone",
+                "zoneType": "SEZ",
+                "establishedDate": "2020-01-01"
+            },
+            {
+                "country": "Gabon",
+                "zoneCode": "OSEZ",
+                "phase": 2,
+                "landArea": 250.0,
+                "zoneName": "Owendo Special Economic Zone",
+                "zoneType": "Industrial",
+                "establishedDate": "2021-06-01"
+            }
+        ]
+
+    # Update this method to use instance method
+    def get_available_plots(
+        self, 
+        query_params: PlotQueryParams,
+        user_zone: Optional[str] = None,
+        is_zone_admin: bool = False
+    ) -> List[PlotResponse]:
+        """
+        Query plots from Firestore with filtering and role-based access.
+        
+        Implements the exact logic from flowchart:
+        1. Apply query parameters (country, zoneCode, category, phase)
+        2. Apply role-based filtering (zone_admin gets zone-specific data)
+        3. Return filtered plot list
+        
+        Args:
+            query_params: Query filters from request
+            user_zone: User's assigned zone (for zone_admin filtering)
+            is_zone_admin: Whether user is zone_admin (affects filtering)
+            
+        Returns:
+            List[PlotResponse]: Filtered list of plots
+        """
+        
+        # Start with all plots
+        filtered_plots = self.plots_data.copy()
+        
+        # Apply role-based filtering first (as per flowchart logic)
+        if is_zone_admin and user_zone:
+            # Zone admin only sees plots in their zone
+            filtered_plots = [
+                plot for plot in filtered_plots 
+                if plot["zoneCode"] == user_zone
+            ]
+        
+        # Apply query parameter filters
+        if query_params.country:
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["country"].lower() == query_params.country.lower()
+            ]
+        
+        if query_params.zoneCode:
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["zoneCode"] == query_params.zoneCode
+            ]
+            
+        if query_params.category:
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["category"] == query_params.category.value
+            ]
+            
+        if query_params.phase:
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["phase"] == query_params.phase
+            ]
+        
+        # Convert to Pydantic models for API response
+        return [PlotResponse(**plot) for plot in filtered_plots]
+
+    async def update_plot(self, request: PlotUpdateRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Update plot information with business allocation details.
+        
+        Logic: 
+        - Validates plot exists and user has access
+        - Updates all provided fields (complete resource update - PUT semantics)
+        - Zone admin can only update plots in their zone
+        
+        Args:
+            request: Plot update request data
+            user_zone: User's zone (for zone_admin access control)
+            
+        Returns:
+            Dict: Success response with plot details
+            
+        Raises:
+            ValueError: If plot not found
+            PermissionError: If zone access denied
+        """
+        # Find the plot
+        plot_index = None
+        for i, plot in enumerate(self.plots_data):
+            if (plot["plotName"] == request.plotName and 
+                plot["zoneCode"] == request.zoneCode and 
+                plot["country"] == request.country):
+                plot_index = i
+                break
+        
+        if plot_index is None:
+            raise ValueError("Plot not found")
+        
+        # Check zone access for zone_admin
+        if user_zone and user_zone != request.zoneCode:
+            raise PermissionError("Access denied: plot not in your assigned zone")
+        
+        # Update plot data with all provided fields
+        plot = self.plots_data[plot_index]
+        plot.update({
+            "phase": request.phase,
+            "plotStatus": request.plotStatus.value,
+            "companyName": request.companyName,
+            "sector": request.sector,
+            "activity": request.activity,
+            "investmentAmount": request.investmentAmount,
+            "employmentGenerated": request.employmentGenerated,
+            "allocatedDate": request.allocatedDate.isoformat() if request.allocatedDate else None,
+            "expiryDate": request.expiryDate.isoformat() if request.expiryDate else None
+        })
+        
+        return {
+            "message": "Plot updated successfully",
+            "plotName": request.plotName,
+            "status": request.plotStatus.value
+        }
+
+    async def release_plot(self, request: PlotReleaseRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Release a plot by setting status to available and clearing allocation data.
+        
+        Logic:
+        - Different from update_plot - only changes status (PATCH semantics)
+        - Clears all business allocation fields
+        - Zone admin can only release plots in their zone
+        
+        Args:
+            request: Plot release request data
+            user_zone: User's zone (for zone_admin access control)
+            
+        Returns:
+            Dict: Success response with plot details
+            
+        Raises:
+            ValueError: If plot not found
+            PermissionError: If zone access denied
+        """
+        # Find the plot
+        plot_index = None
+        for i, plot in enumerate(self.plots_data):
+            if (plot["plotName"] == request.plotName and 
+                plot["zoneCode"] == request.zoneCode and 
+                plot["country"] == request.country):
+                plot_index = i
+                break
+        
+        if plot_index is None:
+            raise ValueError("Plot not found")
+        
+        # Check zone access for zone_admin
+        if user_zone and user_zone != request.zoneCode:
+            raise PermissionError("Access denied: plot not in your assigned zone")
+        
+        # Release the plot - clear allocation data
+        plot = self.plots_data[plot_index]
+        plot.update({
+            "plotStatus": "Available",
+            "companyName": None,
+            "allocatedDate": None,
+            "expiryDate": None,
+            "investmentAmount": None,
+            "employmentGenerated": None,
+            "activity": None
+        })
+        
+        return {
+            "message": "Plot released successfully",
+            "plotName": request.plotName,
+            "status": "available"
+        }
+
+    async def create_zone(self, request: ZoneCreateRequest) -> Dict[str, Any]:
+        """
+        Create or update zone master data.
+        
+        Logic:
+        - Essential for establishing economic zones before creating plots
+        - Validates zone code uniqueness
+        - Only super_admin and zone_admin can create zones
+        
+        Args:
+            request: Zone creation request data
+            
+        Returns:
+            Dict: Success response with zone code
+            
+        Raises:
+            ValueError: If zone code already exists
+        """
+        # Check if zone already exists (country + zoneCode combination)
+        for zone in self.zones_data:
+            if (zone["zoneCode"] == request.zoneCode and 
+                zone["country"] == request.country):
+                raise ValueError(f"Zone code '{request.zoneCode}' already exists in {request.country}")
+        
+        # Add new zone
+        new_zone = {
+            "country": request.country,
+            "zoneCode": request.zoneCode,
+            "phase": request.phase,
+            "landArea": request.landArea,
+            "zoneName": request.zoneName,
+            "zoneType": request.zoneType,
+            "establishedDate": request.establishedDate.isoformat() if request.establishedDate else None
+        }
+        
+        self.zones_data.append(new_zone)
+        
+        return {
+            "message": "Zone data saved successfully",
+            "zoneCode": request.zoneCode
+        }
+
+    async def get_plot_details(self, params: PlotDetailsQueryParams, user_zone: Optional[str] = None) -> PlotDetailsResponse:
+        """
+        Get detailed plot information for a specific zone.
+        
+        Logic:
+        - Returns comprehensive plot data including business details
+        - Provides metadata with summary statistics
+        - Zone admin can only access their assigned zone
+        
+        Args:
+            params: Query parameters (country, zoneCode)
+            user_zone: User's zone (for zone_admin access control)
+            
+        Returns:
+            PlotDetailsResponse: Detailed plot information with metadata
+            
+        Raises:
+            PermissionError: If zone access denied
+        """
+        # Check zone access for zone_admin
+        if user_zone and user_zone != params.zoneCode:
+            raise PermissionError("Access denied: zone not in your assigned zone")
+        
+        # Filter plots by country and zone
+        filtered_plots = [
+            plot for plot in self.plots_data 
+            if plot["country"] == params.country and plot["zoneCode"] == params.zoneCode
+        ]
+        
+        # Calculate metadata
+        total_plots = len(filtered_plots)
+        available_plots = len([plot for plot in filtered_plots if plot["plotStatus"] == "Available"])
+        
+        metadata = PlotDetailsMetadata(
+            country=params.country,
+            zoneCode=params.zoneCode,
+            totalPlots=total_plots,
+            availablePlots=available_plots
+        )
+        
+        # Format plot details
+        plot_items = []
+        for plot in filtered_plots:
+            plot_item = PlotDetailsItem(
+                plotName=plot["plotName"],
+                category=plot["category"],
+                areaInHa=plot["areaInHa"],
+                sector=plot["sector"],
+                activity=plot["activity"],
+                plotStatus=plot["plotStatus"],
+                companyName=plot["companyName"],
+                allocatedDate=datetime.fromisoformat(plot["allocatedDate"]).date() if plot["allocatedDate"] else None,
+                investmentAmount=plot["investmentAmount"],
+                employmentGenerated=plot["employmentGenerated"]
+            )
+            plot_items.append(plot_item)
+        
+        return PlotDetailsResponse(metadata=metadata, plots=plot_items)
+</file>
+
+<file path="app/utils/__init__.py">
+# Utils package
+</file>
+
+<file path="app/utils/auth.py">
+"""
+Authentication dependencies for protected endpoints.
+Handles JWT token verification and user permission checking.
+"""
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
+from app.services.auth import AuthService
+from app.schemas.auth import JWTPayload
+
+# HTTP Bearer token scheme
+security = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> JWTPayload:
+    """
+    Dependency to verify JWT token and extract user payload.
+    
+    Used by protected endpoints to:
+    1. Verify JWT token validity
+    2. Extract user information (userId, role, zone, permissions)
+    3. Return structured user payload
+    
+    Args:
+        credentials: HTTP Authorization header with Bearer token
+        
+    Returns:
+        JWTPayload: Decoded user information and permissions
+        
+    Raises:
+        HTTPException: 401 Unauthorized if token is invalid/expired
+    """
+    
+    # Extract token from Authorization header
+    token = credentials.credentials
+    
+    # Verify and decode JWT token
+    payload = AuthService.verify_jwt_token(token)
+    
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "UNAUTHORIZED",
+                "message": "Invalid or expired JWT token"
+            },
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return payload
+
+
+def require_permission(resource: str, action: str):
+    """
+    Dependency factory to check user permissions for specific resources.
+    
+    Args:
+        resource: Resource type (e.g., "plots", "zones")
+        action: Action type (e.g., "read", "write")
+        
+    Returns:
+        Dependency function that checks permissions
+    """
+    
+    def check_permission(user: JWTPayload = Depends(get_current_user)) -> JWTPayload:
+        """
+        Check if user has required permission for resource and action.
+        
+        Args:
+            user: Current authenticated user
+            
+        Returns:
+            JWTPayload: User payload if permission granted
+            
+        Raises:
+            HTTPException: 403 Forbidden if insufficient permissions
+        """
+        
+        # Check if user has required permission
+        user_permissions = user.permissions.get(action, [])
+        
+        if resource not in user_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error_code": "FORBIDDEN",
+                    "message": f"Insufficient permissions for {action} access to {resource}"
+                }
+            )
+        
+        return user
+    
+    return check_permission
+
+
+# Pre-configured permission dependencies for common use cases
+require_plots_read = require_permission("plots", "read")
+require_plots_write = require_permission("plots", "write") 
+require_zones_read = require_permission("zones", "read")
+require_zones_write = require_permission("zones", "write")
+</file>
+
+<file path="app/__init__.py">
+# App package
+</file>
+
+<file path=".gitignore">
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Firebase
+firebase-debug.log
+.firebase/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Documentation
+docs/_build/
+</file>
+
+<file path="api_specifications.md">
+# API Specifications - Request/Response Schema Documentation
+
+## 1. Authentication API - POST /auth/token
+
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| userId | string | 50 | Mandatory | Must be a valid user identifier |
+| role | string | 20 | Mandatory | Must be one of: `super_admin`, `zone_admin`, `normal_user` |
+| zone | string | 10 | Mandatory | Must be a valid zone code (e.g., GSEZ, OSEZ) |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| access_token | string | 500 | Mandatory | JWT token with 24-hour expiry |
+| token_type | string | 10 | Mandatory | Always "bearer" |
+| expires_in | integer | - | Mandatory | Token expiry time in seconds (86400) |
+
+### Response Schema - Error (400)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | MISSING_PARAMETERS, INVALID_ROLE, INVALID_ZONE |
+| message | string | 200 | Mandatory | Human-readable error description |
+| details | object | - | Optional | Additional error context |
+
+---
+
+## 2. Available Plots API - GET /plots/available
+
+### Request Parameters (Query String)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| country | string | 50 | Optional | Must be a valid country name |
+| zoneCode | string | 10 | Optional | Must be a valid zone code |
+| category | string | 20 | Optional | Must be one of: Residential, Commercial, Industrial |
+| phase | integer | - | Optional | Must be a positive integer |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| plots | array | - | Mandatory | Array of plot objects |
+| plots[].plotName | string | 50 | Mandatory | Unique plot identifier |
+| plots[].plotStatus | string | 20 | Mandatory | Available, Allocated, Reserved |
+| plots[].category | string | 20 | Mandatory | Residential, Commercial, Industrial |
+| plots[].phase | integer | - | Mandatory | Phase number |
+| plots[].areaInSqm | decimal | - | Mandatory | Area in square meters |
+| plots[].areaInHa | decimal | - | Mandatory | Area in hectares |
+| plots[].zoneCode | string | 10 | Mandatory | Zone code |
+| plots[].country | string | 50 | Mandatory | Country name |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, FORBIDDEN |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## 3. Plot Update API - PUT /update-plot
+
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| country | string | 50 | Mandatory | Must be a valid country name |
+| zoneCode | string | 10 | Mandatory | Must be a valid zone code |
+| phase | integer | - | Mandatory | Must be a positive integer |
+| plotName | string | 50 | Mandatory | Must exist in the system |
+| companyName | string | 100 | Optional | Company name for allocation |
+| sector | string | 50 | Optional | Business sector |
+| plotStatus | string | 20 | Mandatory | Available, Allocated, Reserved |
+| activity | string | 100 | Optional | Business activity description |
+| investmentAmount | decimal | - | Optional | Investment amount in USD |
+| employmentGenerated | integer | - | Optional | Number of jobs created |
+| allocatedDate | string | 10 | Optional | Date in YYYY-MM-DD format |
+| expiryDate | string | 10 | Optional | Date in YYYY-MM-DD format |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| message | string | 100 | Mandatory | "Plot updated successfully" |
+| plotName | string | 50 | Mandatory | Updated plot name |
+| status | string | 20 | Mandatory | Updated status |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, FORBIDDEN, PLOT_NOT_FOUND |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## 4. Plot Release API - PATCH /release-plot
+
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| country | string | 50 | Mandatory | Must be a valid country name |
+| zoneCode | string | 10 | Mandatory | Must be a valid zone code |
+| plotName | string | 50 | Mandatory | Must exist in the system |
+| plotStatus | string | 20 | Mandatory | Must be "available" |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| message | string | 100 | Mandatory | "Plot released successfully" |
+| plotName | string | 50 | Mandatory | Released plot name |
+| status | string | 20 | Mandatory | "available" |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, FORBIDDEN, PLOT_NOT_FOUND |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## 5. Zone Master API - POST /country/zones
+
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| country | string | 50 | Mandatory | Must be a valid country name |
+| zoneCode | string | 10 | Mandatory | Must be unique zone identifier |
+| phase | integer | - | Mandatory | Must be a positive integer |
+| landArea | decimal | - | Mandatory | Total land area in hectares |
+| zoneName | string | 100 | Optional | Descriptive zone name |
+| zoneType | string | 30 | Optional | SEZ, Industrial, Commercial |
+| establishedDate | string | 10 | Optional | Date in YYYY-MM-DD format |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| message | string | 100 | Mandatory | "Zone data saved successfully" |
+| zoneCode | string | 10 | Mandatory | Created/updated zone code |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, FORBIDDEN, ZONE_EXISTS |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## 6. Open API - GET /plot-details
+
+### Request Parameters (Query String)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| country | string | 50 | Mandatory | Must be a valid country name |
+| zoneCode | string | 10 | Mandatory | Must be a valid zone code |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| metadata | object | - | Mandatory | Zone metadata information |
+| metadata.country | string | 50 | Mandatory | Country name |
+| metadata.zoneCode | string | 10 | Mandatory | Zone code |
+| metadata.totalPlots | integer | - | Mandatory | Total number of plots |
+| metadata.availablePlots | integer | - | Mandatory | Number of available plots |
+| plots | array | - | Mandatory | Array of detailed plot objects |
+| plots[].plotName | string | 50 | Mandatory | Plot identifier |
+| plots[].category | string | 20 | Mandatory | Plot category |
+| plots[].areaInHa | decimal | - | Mandatory | Area in hectares |
+| plots[].sector | string | 50 | Optional | Business sector |
+| plots[].activity | string | 100 | Optional | Business activity |
+| plots[].plotStatus | string | 20 | Mandatory | Current status |
+| plots[].companyName | string | 100 | Optional | Allocated company name |
+| plots[].allocatedDate | string | 10 | Optional | Allocation date |
+| plots[].investmentAmount | decimal | - | Optional | Investment amount |
+| plots[].employmentGenerated | integer | - | Optional | Jobs created |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, FORBIDDEN |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## Common Business Validations
+
+### Role-Based Permissions
+- **super_admin**: Full read/write access to all zones
+- **zone_admin**: Read/write access only to assigned zone
+- **normal_user**: Read-only access to plots
+
+### Zone Codes
+- Must follow format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
+- Must exist in the zone master data
+
+### Plot Status Values
+- **Available**: Plot is free for allocation
+- **Allocated**: Plot is assigned to a company
+- **Reserved**: Plot is temporarily held
+
+### Date Format
+- All dates must be in ISO 8601 format: YYYY-MM-DD
+- Future dates validation where applicable
+
+### Numeric Validations
+- Areas must be positive decimal values
+- Phase numbers must be positive integers
+- Investment amounts must be non-negative
+- Employment numbers must be non-negative integers
+
+---
+
+## Error Codes Reference
+
+| Error Code | HTTP Status | Description |
+|-----------|-------------|-------------|
+| MISSING_PARAMETERS | 400 | Required parameters are missing |
+| INVALID_ROLE | 400 | Role is not in allowed values |
+| INVALID_ZONE | 400 | Zone code is invalid |
+| UNAUTHORIZED | 401 | Invalid or expired JWT token |
+| FORBIDDEN | 403 | Insufficient permissions |
+| PLOT_NOT_FOUND | 404 | Plot does not exist |
+| ZONE_EXISTS | 409 | Zone code already exists |
+| INTERNAL_ERROR | 500 | Server internal error |
+</file>
+
+<file path="dev-requirements.txt">
+# Development Dependencies (additional to main requirements.txt)
+# These are used only during development and testing
+
+# Advanced Development Tools
+pre-commit                       # Git hooks for code quality
+mypy                            # Static type checking
+coverage                        # Code coverage reporting
+pytest-cov                     # Coverage plugin for pytest
+
+# API Documentation
+mkdocs                          # Documentation generator
+mkdocs-material                 # Material theme for MkDocs
+
+# Database Development
+firebase-admin                  # Firebase development tools
+
+# Code Quality
+bandit                          # Security linting
+safety                          # Security vulnerability checker
+</file>
+
+<file path="requirements-dev.txt">
+# Development-only dependencies
+-r requirements.txt
+
+# Additional Development Tools
+jupyter==1.0.0                   # Jupyter notebook for data exploration
+ipython==8.17.2                  # Enhanced Python REPL
+pre-commit==3.5.0                # Git hooks for code quality
+mypy==1.7.1                      # Static type checking
+
+# API Documentation
+mkdocs==1.5.3                    # Documentation generator
+mkdocs-material==9.4.8           # Material theme for mkdocs
+
+# Database Migration Tools (if needed)
+alembic==1.12.1                  # Database migration tool (for SQL databases)
+
+# Load Testing
+locust==2.17.0                   # Load testing tool
+</file>
+
+<file path="requirements.txt">
+# FastAPI Framework and Dependencies
+fastapi                          # Main FastAPI framework
+uvicorn[standard]                # ASGI server for running FastAPI
+pydantic                         # Data validation and settings management
+pydantic-settings                # Settings management using Pydantic
+
+# Authentication and Security
+python-jose[cryptography]        # JWT token creation and validation
+passlib[bcrypt]                  # Password hashing (if needed later)
+python-multipart                 # Form data parsing
+
+# Database - Firebase/Firestore
+firebase-admin                   # Firebase Admin SDK for Firestore
+google-cloud-firestore           # Google Cloud Firestore client
+
+# HTTP Client
+httpx                            # Async HTTP client (for external API calls)
+
+# Development and Testing
+pytest                           # Testing framework
+pytest-asyncio                   # Async testing support
+black                            # Code formatter
+flake8                           # Linting
+isort                            # Import sorting
+
+# Environment and Configuration
+python-dotenv                    # Environment variable management
+
+# CORS and Middleware
+fastapi-cors                     # CORS handling (alternative to FastAPI built-in)
+
+# Date and Time
+python-dateutil                  # Date parsing utilities
+
+# Logging
+structlog                        # Structured logging
+
+# Production Dependencies
+gunicorn                         # Production WSGI server (if needed)
+</file>
+
+<file path="setup_guide.md">
+# Arise FastAPI Project Setup Guide
+
+## Phase 1: Local Development Setup
+
+### Prerequisites
+- Python 3.8+ installed
+- Git installed
+- Terminal/Command Line access
+
+### Setup Commands and Their Purpose
+
+```bash
+# 1. Navigate to project directory
+cd /home/user/Desktop/arise_fastapi
+# Purpose: Change to the project root directory
+
+# 2. Create Python virtual environment
+python3 -m venv venv
+# Purpose: Create isolated Python environment to avoid dependency conflicts
+
+# 3. Activate virtual environment (Linux/Mac)
+source venv/bin/activate
+# Purpose: Activate the virtual environment to use project-specific packages
+
+# 4. Upgrade pip to latest version
+pip install --upgrade pip
+# Purpose: Ensure we have the latest package installer
+
+# 5. Install project dependencies
+pip install -r requirements.txt
+# Purpose: Install all required packages for the FastAPI project
+
+# 6. Create environment variables file
+cp .env.example .env
+# Purpose: Create local environment configuration file
+
+# 7. Generate requirements with versions (after installation)
+pip freeze > requirements-lock.txt
+# Purpose: Lock current versions for reproducible deployments
+
+# 8. Run the development server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Purpose: Start FastAPI development server with auto-reload
+```
+
+## Project Structure Creation
+
+The following directories and files will be created:
+
+```
+arise_fastapi/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI application entry point
+│   ├── config.py               # Configuration settings
+│   ├── dependencies.py         # Dependency injection
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── v1/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py         # Authentication endpoints
+│   │   │   ├── plots.py        # Plot management endpoints
+│   │   │   └── zones.py        # Zone management endpoints
+│   │   └── deps.py             # API dependencies
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── security.py         # JWT and security utilities
+│   │   ├── permissions.py      # Role-based permissions
+│   │   └── exceptions.py       # Custom exceptions
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── auth.py             # Authentication models
+│   │   ├── plots.py            # Plot data models
+│   │   └── zones.py            # Zone data models
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── auth_service.py     # Authentication business logic
+│   │   ├── plot_service.py     # Plot management logic
+│   │   └── firestore_service.py # Database operations
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── logger.py           # Logging configuration
+│       └── validators.py       # Custom validators
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_auth.py            # Authentication tests
+│   ├── test_plots.py           # Plot endpoint tests
+│   └── conftest.py             # Test configuration
+│
+├── scripts/
+│   ├── setup_firestore.py      # Database initialization
+│   └── generate_sample_data.py # Sample data creation
+│
+├── docs/
+│   ├── api_specifications.md   # API documentation
+│   └── setup.md               # Setup instructions
+│
+├── .env.example                # Environment variables template
+├── .env                        # Local environment variables (git-ignored)
+├── .gitignore                  # Git ignore file
+├── requirements.txt            # Project dependencies
+├── requirements-lock.txt       # Locked dependency versions
+├── README.md                   # Project documentation
+└── main.py                     # Application entry point
+```
+
+## Key Dependencies Purpose
+
+- **fastapi**: Modern, fast web framework for building APIs
+- **uvicorn**: Lightning-fast ASGI server for production
+- **pydantic**: Data validation and settings management
+- **python-jose**: JWT token creation and validation
+- **firebase-admin**: Firebase/Firestore database integration
+- **python-dotenv**: Environment variable management
+- **pytest**: Testing framework for quality assurance
+
+## Environment Variables Required
+
+```env
+# Security
+JWT_SECRET_KEY=your-super-secret-jwt-key-here
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_HOURS=24
+
+# Firebase Configuration
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_PRIVATE_KEY_ID=your-private-key-id
+FIREBASE_PRIVATE_KEY=your-private-key
+FIREBASE_CLIENT_EMAIL=your-client-email
+FIREBASE_CLIENT_ID=your-client-id
+FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
+
+# Application Settings
+APP_NAME="Arise Plot Management API"
+APP_VERSION="1.0.0"
+DEBUG=True
+```
+
+## Development Workflow
+
+1. **Setup Phase**: Create virtual environment and install dependencies
+2. **Development Phase**: Implement endpoints following the API specifications
+3. **Testing Phase**: Write and run comprehensive tests
+4. **Documentation Phase**: Generate OpenAPI documentation
+5. **Deployment Phase**: Prepare for production deployment
+
+Ready to proceed with the next phase!
+</file>
+
+<file path="SETUP.md">
+# Arise FastAPI Project Setup Commands
+
+## 1. Virtual Environment Setup
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment (Linux/Mac)
+source venv/bin/activate
+
+# Activate virtual environment (Windows)
+# venv\Scripts\activate
+
+# Check if venv is activated
+echo $VIRTUAL_ENV
+which python
+
+# Deactivate virtual environment
+deactivate
+
+# Purpose: Isolates project dependencies from system Python packages
+```
+
+## 2. Install Dependencies
+```bash
+# Install production dependencies
+pip install -r requirements.txt
+
+# Install development dependencies (includes production)
+pip install -r requirements-dev.txt
+
+# Purpose: Installs all required packages for the FastAPI application
+```
+
+## 3. Environment Configuration
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Purpose: Sets up environment variables for configuration
+```
+
+## 4. Firebase Setup
+```bash
+# Create Firebase service account key directory
+mkdir -p app/config/firebase
+
+# Purpose: Stores Firebase service account credentials securely
+```
+
+## 5. Development Server
+```bash
+# Run development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Purpose: Starts FastAPI development server with auto-reload
+```
+
+## 6. Code Quality Tools
+```bash
+# Format code
+black app/
+
+# Sort imports
+isort app/
+
+# Lint code
+flake8 app/
+
+# Type checking
+mypy app/
+
+# Purpose: Maintains code quality and consistency
+```
+
+## 7. Testing
+```bash
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=app tests/
+
+# Purpose: Ensures code functionality and reliability
+```
+
+## 8. Database Operations
+```bash
+# Initialize Firestore (done programmatically)
+# No migrations needed for NoSQL
+
+# Purpose: Firestore is schema-less, no migration setup required
+```
+
+## Dependencies Explanation
+
+### Core Framework
+- **fastapi**: Modern, fast web framework for building APIs
+- **uvicorn**: ASGI server for running FastAPI applications
+- **pydantic**: Data validation and serialization
+
+### Authentication & Security
+- **python-jose**: JWT token creation and validation
+- **passlib**: Password hashing utilities
+- **python-multipart**: Handle form data and file uploads
+
+### Database
+- **firebase-admin**: Official Firebase Admin SDK
+- **google-cloud-firestore**: Direct Firestore client library
+
+### Development
+- **pytest**: Testing framework
+- **black**: Code formatter
+- **flake8**: Code linting
+- **isort**: Import sorting
+
+### Configuration
+- **python-dotenv**: Environment variable management
+- **pydantic-settings**: Settings management
+
+### Production
+- **gunicorn**: Production WSGI server
+- **structlog**: Structured logging
+</file>
+
+<file path="app/main.py">
+"""
+Main FastAPI application entry point.
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+from app.api.auth import router as auth_router
+from app.api.plots import router as plots_router
+from app.api.zones import router as zones_router
+
+# Create FastAPI application instance
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="FastAPI backend for Arise Plot Management System with comprehensive plot and zone management",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Configure CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["*"],
+)
+
+# Include API routers
+app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(plots_router, prefix=settings.API_V1_STR)
+app.include_router(zones_router, prefix=settings.API_V1_STR)
+
+@app.get("/")
+async def root():
+    """Root endpoint for health check."""
+    return {
+        "message": "Arise Plot Management API",
+        "version": settings.APP_VERSION,
+        "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION
+    }
+</file>
+
+<file path="api_flow_diagram.mermaid">
+flowchart TD
+    subgraph auth ["Authentication Flow - POST /auth/token"]
+        A[Client App] -->|"POST /auth/token<br/>Body: {userId, role, zone}"| B[FastAPI Backend]
+        B --> C{Validate Parameters}
+        C -->|"Missing Parameters"| D["400 Bad Request<br/>MISSING_PARAMETERS"]
+        C -->|"Invalid Role"| E["400 Bad Request<br/>INVALID_ROLE"]
+        C -->|"Invalid Zone"| F["400 Bad Request<br/>INVALID_ZONE"]
+        C -->|"Valid"| G[Assign Role-Based Permissions]
+        G --> H{Role Type}
+        H -->|"super_admin"| I["Permissions:<br/>read: plots<br/>write: plots"]
+        H -->|"zone_admin"| J["Permissions:<br/>read: plots<br/>write: plots for zone only"]
+        H -->|"normal_user"| K["Permissions:<br/>read: plots<br/>write: none"]
+        I --> L["Create JWT Token<br/>24hr expiry"]
+        J --> L
+        K --> L
+        L --> M["200 OK<br/>Return JWT Token"]
+        M --> N[Client Stores Token]
+    end
+
+    subgraph unified ["Unified API Request Flow"]
+        N --> O[Client Makes API Request<br/>Authorization: Bearer token]
+        O --> P[FastAPI Backend]
+        P --> Q[Verify JWT Token]
+        Q -->|"Invalid/Expired"| R[401 Unauthorized]
+        Q -->|"Valid"| S["Extract User Payload<br/>{userId, role, zone, permissions}"]
+        S --> T{Check Required Permission}
+        T -->|"No Permission"| U[403 Forbidden]
+        T -->|"Has Permission"| V{Request Type}
+        
+        V -->|"GET /plots/available"| RR[Query Firestore<br/>GET /plots/available]
+        V -->|"PUT /update-plot"| SS[Update Firestore<br/>PUT /update-plot]
+        V -->|"PATCH /release-plot"| TT[Update Firestore<br/>PATCH /release-plot]
+        V -->|"POST /country/zones"| UU[Create/Update Firestore<br/>POST /country/zones]
+        V -->|"GET /plot-details"| VV[Query Firestore<br/>GET /plot-details]
+        
+        RR --> WW[(Firestore Database)]
+        SS --> XX[(Firestore Database)]
+        TT --> YY[(Firestore Database)]
+        UU --> ZZ[(Firestore Database)]
+        VV --> AAA[(Firestore Database)]
+        
+        WW --> BBB["200 OK<br/>Available Plots Response"]
+        XX --> CCC["200 OK<br/>Plot Updated Successfully"]
+        YY --> DDD["200 OK<br/>Plot Released Successfully"]
+        ZZ --> EEE["200 OK<br/>Zone Data Saved"]
+        AAA --> FFF["200 OK<br/>Plot Details Response"]
+    end
+
+    %% Styling
+    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef backendStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef dbStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef successStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef decisionStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef permissionStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef requestStyle fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+
+    class A,O clientStyle
+    class B,P,Q,S backendStyle
+    class WW,XX,YY,ZZ,AAA dbStyle
+    class D,E,F,R,U errorStyle
+    class M,BBB,CCC,DDD,EEE,FFF successStyle
+    class C,T,V decisionStyle
+    class I,J,K permissionStyle
+    class RR,SS,TT,UU,VV requestStyle
+</file>
+
+</files>
