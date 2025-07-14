@@ -100,3 +100,52 @@ require_plots_read = require_permission("plots", "read")
 require_plots_write = require_permission("plots", "write") 
 require_zones_read = require_permission("zones", "read")
 require_zones_write = require_permission("zones", "write")
+
+
+def require_permissions(actions: list, resources: list):
+    """
+    Dependency factory to check user permissions for multiple resources/actions.
+    
+    Args:
+        actions: List of action types (e.g., ["read", "write"])
+        resources: List of resource types (e.g., ["plots", "zones", "users"])
+        
+    Returns:
+        Dependency function that checks permissions
+    """
+    
+    def check_permissions(user: JWTPayload = Depends(get_current_user)) -> JWTPayload:
+        """
+        Check if user has required permissions for resources and actions.
+        
+        Args:
+            user: Current authenticated user
+            
+        Returns:
+            JWTPayload: User payload if permissions granted
+            
+        Raises:
+            HTTPException: 403 Forbidden if insufficient permissions
+        """
+        
+        # Check each action-resource combination
+        for action in actions:
+            user_permissions = user.permissions.get(action, [])
+            for resource in resources:
+                if resource not in user_permissions:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "error_code": "FORBIDDEN",
+                            "message": f"Insufficient permissions for {action} access to {resource}",
+                            "details": {
+                                "required_action": action,
+                                "required_resource": resource,
+                                "user_permissions": user.permissions
+                            }
+                        }
+                    )
+        
+        return user
+    
+    return check_permissions
