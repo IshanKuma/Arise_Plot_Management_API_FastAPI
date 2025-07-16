@@ -1,6 +1,7 @@
 """
 Authentication-related Pydantic schemas for request/response validation.
 """
+import re
 from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Any, Optional
 from enum import Enum
@@ -22,6 +23,8 @@ class AuthTokenRequest(BaseModel):
     - userId: string, max 50 chars, mandatory
     - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
     - zone: string, max 10 chars, mandatory (valid zone code)
+    
+    Note: Authentication secret is passed via Authorization header: "Secret <secret-key>"
     """
     userId: str = Field(..., max_length=50, description="Valid user identifier")
     role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
@@ -139,7 +142,6 @@ class CreateUserRequest(BaseModel):
     @validator('email')
     def validate_email(cls, v):
         """Validate email format."""
-        import re
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
             raise ValueError('Invalid email format')
@@ -179,7 +181,6 @@ class UpdateUserRequest(BaseModel):
     @validator('email')
     def validate_email(cls, v):
         """Validate email format."""
-        import re
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
             raise ValueError('Invalid email format')

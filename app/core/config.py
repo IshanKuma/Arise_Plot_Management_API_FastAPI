@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256" 
     JWT_EXPIRE_HOURS: int = 24
     
+    # Authentication Secret Key (for token generation authorization)
+    AUTH_SECRET_KEY: str = "arise-master-auth-secret-2025"
+    
     # Firebase Configuration
     FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
     FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
