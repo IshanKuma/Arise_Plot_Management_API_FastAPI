@@ -27,13 +27,21 @@ class AuthService:
     VALID_ZONES = ["GSEZ", "OSEZ", "GABON", "TEST"]
     
     @classmethod
-    def validate_request(cls, request: AuthTokenRequest) -> Optional[str]:
+    def validate_request(cls, request: AuthTokenRequest, secret_key: str) -> Optional[str]:
         """
-        Validate authentication request parameters.
+        Validate authentication request parameters including secret key.
         
+        Args:
+            request: Authentication request data
+            secret_key: Secret key from Authorization header
+            
         Returns:
             Optional[str]: Error code if validation fails, None if valid
         """
+        # Check if secret key is valid
+        if secret_key != settings.AUTH_SECRET_KEY:
+            return "INVALID_SECRET_KEY"
+            
         # Check if role is valid (already validated by Pydantic enum)
         if request.role not in [role.value for role in UserRole]:
             return "INVALID_ROLE"
