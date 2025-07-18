@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # Firebase Configuration
     FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
+    FIREBASE_CREDENTIALS_PATH: str = "/home/user/Desktop/arise_fastapi/credentials/firebase-service-account.json"
     FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
     FIREBASE_PRIVATE_KEY: str = ""
     FIREBASE_CLIENT_EMAIL: str = ""

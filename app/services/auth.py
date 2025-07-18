@@ -1,20 +1,24 @@
 """
 Authentication service for JWT token creation and validation.
 Implements the exact logic as specified in Flow 1 requirements.
-Enhanced with user management capabilities.
+Enhanced with user management capabilities using Firestore.
 """
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import jwt
+from google.cloud import firestore
 from app.core.config import settings
+from app.core.firebase import get_firestore_db
 from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest, CreateUserRequest, UpdateUserRequest, UserModel, UserResponse
 
 
 class AuthService:
-    """Authentication service for handling JWT operations and user management."""
+    """Authentication service for handling JWT operations and user management with Firestore."""
     
-    # In-memory user storage (replace with Firestore in production)
-    _users: Dict[str, UserModel] = {}
+    def __init__(self):
+        """Initialize Firestore client for user management."""
+        self.db = get_firestore_db()
+        self.users_collection = self.db.collection(settings.FIRESTORE_COLLECTION_USERS)
     
     # Role-based permissions mapping as specified in the requirements
     PERMISSIONS_MAP = {
@@ -138,10 +142,9 @@ class AuthService:
 
     # User Management Methods
     
-    @classmethod
-    def create_user(cls, request: CreateUserRequest) -> Optional[UserResponse]:
+    def create_user(self, request: CreateUserRequest) -> Optional[UserResponse]:
         """
-        Create a new user.
+        Create a new user in Firestore.
         
         Args:
             request: User creation request
@@ -150,37 +153,42 @@ class AuthService:
             Optional[UserResponse]: Created user data or None if user exists
         """
         # Check if user already exists
-        if request.email in cls._users:
+        existing_query = self.users_collection.where("email", "==", request.email).limit(1)
+        existing_docs = list(existing_query.stream())
+        
+        if existing_docs:
             return None
             
         # Validate zone
-        if request.zone not in cls.VALID_ZONES:
+        if request.zone not in self.VALID_ZONES:
             raise ValueError(f"Invalid zone: {request.zone}")
             
-        # Create user
+        # Create user document
         now = datetime.utcnow()
-        user = UserModel(
-            email=request.email,
-            role=request.role,
-            zone=request.zone,
-            createdDate=now,
-            lastModified=now
-        )
+        user_data = {
+            "email": request.email,
+            "role": request.role.value,
+            "zone": request.zone,
+            "createdDate": now,
+            "lastModified": now,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP
+        }
         
-        cls._users[request.email] = user
+        # Add user to Firestore
+        self.users_collection.add(user_data)
         
         return UserResponse(
-            email=user.email,
-            role=user.role,
-            zone=user.zone,
-            createdDate=user.createdDate,
-            lastModified=user.lastModified
+            email=user_data["email"],
+            role=UserRole(user_data["role"]),
+            zone=user_data["zone"],
+            createdDate=user_data["createdDate"],
+            lastModified=user_data["lastModified"]
         )
     
-    @classmethod
-    def update_user(cls, request: UpdateUserRequest) -> Optional[UserResponse]:
+    def update_user(self, request: UpdateUserRequest) -> Optional[UserResponse]:
         """
-        Update an existing user.
+        Update an existing user in Firestore.
         
         Args:
             request: User update request
@@ -188,41 +196,55 @@ class AuthService:
         Returns:
             Optional[UserResponse]: Updated user data or None if user not found
         """
-        # Check if user exists
-        if request.email not in cls._users:
+        # Find user document
+        user_query = self.users_collection.where("email", "==", request.email).limit(1)
+        docs = list(user_query.stream())
+        
+        if not docs:
             return None
             
-        user = cls._users[request.email]
+        user_doc = docs[0]
+        user_data = user_doc.to_dict()
+        
+        # Prepare update data
+        update_data = {}
         updated = False
         
         # Update role if provided
         if request.role is not None:
-            user.role = request.role
+            update_data["role"] = request.role.value
+            user_data["role"] = request.role.value
             updated = True
             
         # Update zone if provided
         if request.zone is not None:
-            if request.zone not in cls.VALID_ZONES:
+            if request.zone not in self.VALID_ZONES:
                 raise ValueError(f"Invalid zone: {request.zone}")
-            user.zone = request.zone
+            update_data["zone"] = request.zone
+            user_data["zone"] = request.zone
             updated = True
             
         # Update lastModified if any changes were made
         if updated:
-            user.lastModified = datetime.utcnow()
+            now = datetime.utcnow()
+            update_data["lastModified"] = now
+            update_data["updatedAt"] = firestore.SERVER_TIMESTAMP
+            user_data["lastModified"] = now
+            
+            # Update the document
+            user_doc.reference.update(update_data)
             
         return UserResponse(
-            email=user.email,
-            role=user.role,
-            zone=user.zone,
-            createdDate=user.createdDate,
-            lastModified=user.lastModified
+            email=user_data["email"],
+            role=UserRole(user_data["role"]),
+            zone=user_data["zone"],
+            createdDate=user_data["createdDate"],
+            lastModified=user_data["lastModified"]
         )
     
-    @classmethod
-    def get_user_by_email(cls, email: str) -> Optional[UserModel]:
+    def get_user_by_email(self, email: str) -> Optional[UserModel]:
         """
-        Get user by email.
+        Get user by email from Firestore.
         
         Args:
             email: User email
@@ -230,23 +252,44 @@ class AuthService:
         Returns:
             Optional[UserModel]: User data or None if not found
         """
-        return cls._users.get(email.lower())
+        user_query = self.users_collection.where("email", "==", email.lower()).limit(1)
+        docs = list(user_query.stream())
+        
+        if not docs:
+            return None
+            
+        user_data = docs[0].to_dict()
+        
+        return UserModel(
+            email=user_data["email"],
+            role=UserRole(user_data["role"]),
+            zone=user_data["zone"],
+            createdDate=user_data["createdDate"],
+            lastModified=user_data["lastModified"]
+        )
     
-    @classmethod
-    def list_users(cls) -> List[UserResponse]:
+    def list_users(self) -> List[UserResponse]:
         """
-        List all users.
+        List all users from Firestore.
         
         Returns:
             List[UserResponse]: List of all users
         """
-        return [
-            UserResponse(
-                email=user.email,
-                role=user.role,
-                zone=user.zone,
-                createdDate=user.createdDate,
-                lastModified=user.lastModified
-            )
-            for user in cls._users.values()
-        ]
+        docs = self.users_collection.stream()
+        users = []
+        
+        for doc in docs:
+            user_data = doc.to_dict()
+            users.append(UserResponse(
+                email=user_data["email"],
+                role=UserRole(user_data["role"]),
+                zone=user_data["zone"],
+                createdDate=user_data["createdDate"],
+                lastModified=user_data["lastModified"]
+            ))
+        
+        return users
+
+
+# Create a single instance to be used across the application
+auth_service = AuthService()

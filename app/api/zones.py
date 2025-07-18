@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.schemas.plots import ZoneCreateRequest, ZoneCreateResponse
 from app.schemas.auth import JWTPayload
 from app.utils.auth import require_zones_write
-from app.services.firestore import FirestoreService
+from app.services.firestore import firestore_service
 
 router = APIRouter(prefix="/country", tags=["Zones"])
-firestore_service = FirestoreService()
+# Use the singleton firestore_service instance
 
 
 @router.post(

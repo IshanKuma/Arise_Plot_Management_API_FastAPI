@@ -5,7 +5,7 @@ Implements POST /auth/token endpoint as per Flow 1 specifications.
 from fastapi import APIRouter, HTTPException, status, Header
 from typing import Optional
 from app.schemas.auth import AuthTokenRequest, AuthTokenResponse, AuthErrorResponse
-from app.services.auth import AuthService
+from app.services.auth import AuthService, auth_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

@@ -30,25 +30,82 @@ class FirestoreService:
         self.plots_collection = self.db.collection(settings.FIRESTORE_COLLECTION_PLOTS)
         self.zones_collection = self.db.collection(settings.FIRESTORE_COLLECTION_ZONES)
         self.users_collection = self.db.collection(settings.FIRESTORE_COLLECTION_USERS)
-
-    def _convert_firestore_timestamp(self, timestamp) -> Optional[str]:
-        """Convert Firestore timestamp to ISO string format."""
-        if timestamp is None:
-            return None
-        if hasattr(timestamp, 'isoformat'):
-            return timestamp.isoformat()
-        return str(timestamp)
-
-    def _prepare_plot_for_response(self, doc_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert Firestore document data to response format."""
-        # Convert Firestore timestamps to strings for JSON serialization
-        if 'allocatedDate' in doc_data:
-            doc_data['allocatedDate'] = self._convert_firestore_timestamp(doc_data['allocatedDate'])
-        if 'expiryDate' in doc_data:
-            doc_data['expiryDate'] = self._convert_firestore_timestamp(doc_data['expiryDate'])
+            {
+                "plotName": "GSEZ-R-001",
+                "plotStatus": "Available",
+                "category": "Residential",
+                "phase": 1,
+                "areaInSqm": 5000.0,
+                "areaInHa": 0.5,
+                "zoneCode": "GSEZ",
+                "country": "Gabon",
+                "sector": "Housing",
+                "activity": "Residential Development",
+                "companyName": None,
+                "allocatedDate": None,
+                "expiryDate": None,
+                "investmentAmount": None,
+                "employmentGenerated": None
+            },
+            {
+                "plotName": "GSEZ-C-002",
+                "plotStatus": "Allocated",
+                "category": "Commercial",
+                "phase": 1,
+                "areaInSqm": 10000.0,
+                "areaInHa": 1.0,
+                "zoneCode": "GSEZ",
+                "country": "Gabon",
+                "sector": "Technology",
+                "activity": "Software Development",
+                "companyName": "TechCorp Ltd",
+                "allocatedDate": "2024-01-15",
+                "expiryDate": "2029-01-15",
+                "investmentAmount": 500000.0,
+                "employmentGenerated": 25
+            },
+            {
+                "plotName": "OSEZ-I-001",
+                "plotStatus": "Available",
+                "category": "Industrial",
+                "phase": 2,
+                "areaInSqm": 20000.0,
+                "areaInHa": 2.0,
+                "zoneCode": "OSEZ",
+                "country": "Gabon",
+                "sector": "Manufacturing",
+                "activity": None,
+                "companyName": None,
+                "allocatedDate": None,
+                "expiryDate": None,
+                "investmentAmount": None,
+                "employmentGenerated": None
+            }
+        ]
         
-        return doc_data
+        # Mock zone data - simulates Firestore zones collection
+        self.zones_data = [
+            {
+                "country": "Gabon",
+                "zoneCode": "GSEZ",
+                "phase": 1,
+                "landArea": 100.5,
+                "zoneName": "Gabon Special Economic Zone",
+                "zoneType": "SEZ",
+                "establishedDate": "2020-01-01"
+            },
+            {
+                "country": "Gabon",
+                "zoneCode": "OSEZ",
+                "phase": 2,
+                "landArea": 250.0,
+                "zoneName": "Owendo Special Economic Zone",
+                "zoneType": "Industrial",
+                "establishedDate": "2021-06-01"
+            }
+        ]
 
+    # Update this method to use instance method
     def get_available_plots(
         self, 
         query_params: PlotQueryParams,
@@ -72,37 +129,44 @@ class FirestoreService:
             List[PlotResponse]: Filtered list of plots
         """
         
-        # Start with base query
-        query = self.plots_collection
+        # Start with all plots
+        filtered_plots = self.plots_data.copy()
         
         # Apply role-based filtering first (as per flowchart logic)
         if is_zone_admin and user_zone:
             # Zone admin only sees plots in their zone
-            query = query.where("zoneCode", "==", user_zone)
+            filtered_plots = [
+                plot for plot in filtered_plots 
+                if plot["zoneCode"] == user_zone
+            ]
         
         # Apply query parameter filters
         if query_params.country:
-            query = query.where("country", "==", query_params.country)
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["country"].lower() == query_params.country.lower()
+            ]
         
         if query_params.zoneCode:
-            query = query.where("zoneCode", "==", query_params.zoneCode)
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["zoneCode"] == query_params.zoneCode
+            ]
             
         if query_params.category:
-            query = query.where("category", "==", query_params.category.value)
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["category"] == query_params.category.value
+            ]
             
         if query_params.phase:
-            query = query.where("phase", "==", query_params.phase)
+            filtered_plots = [
+                plot for plot in filtered_plots
+                if plot["phase"] == query_params.phase
+            ]
         
-        # Execute query and convert to response format
-        docs = query.stream()
-        plots = []
-        
-        for doc in docs:
-            doc_data = doc.to_dict()
-            doc_data = self._prepare_plot_for_response(doc_data)
-            plots.append(PlotResponse(**doc_data))
-        
-        return plots
+        # Convert to Pydantic models for API response
+        return [PlotResponse(**plot) for plot in filtered_plots]
 
     async def update_plot(self, request: PlotUpdateRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -399,3 +463,4 @@ class FirestoreService:
 
 # Create a single instance to be used across the application
 firestore_service = FirestoreService()
+

@@ -12,10 +12,10 @@ from app.schemas.plots import (
 )
 from app.schemas.auth import JWTPayload
 from app.utils.auth import require_plots_read, require_plots_write
-from app.services.firestore import FirestoreService
+from app.services.firestore import firestore_service
 
 router = APIRouter(prefix="/plots", tags=["Plots"])
-firestore_service = FirestoreService()
+# Use the singleton firestore_service instance
 
 
 @router.get(

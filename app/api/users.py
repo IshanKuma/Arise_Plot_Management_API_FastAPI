@@ -12,7 +12,7 @@ from app.schemas.auth import (
     AuthErrorResponse,
     JWTPayload
 )
-from app.services.auth import AuthService
+from app.services.auth import auth_service
 from app.utils.auth import require_permissions
 
 router = APIRouter(prefix="/users", tags=["User Management"])
@@ -60,7 +60,7 @@ async def create_user(
     
     try:
         # Create the user
-        user = AuthService.create_user(request)
+        user = auth_service.create_user(request)
         
         if user is None:
             raise HTTPException(
@@ -149,7 +149,7 @@ async def update_user(
     
     try:
         # Update the user
-        user = AuthService.update_user(request)
+        user = auth_service.update_user(request)
         
         if user is None:
             raise HTTPException(
@@ -218,7 +218,7 @@ async def list_users(
         )
     
     try:
-        users = AuthService.list_users()
+        users = auth_service.list_users()
         return users
         
     except Exception as e:

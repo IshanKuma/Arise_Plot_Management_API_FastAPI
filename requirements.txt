@@ -10,8 +10,10 @@ passlib[bcrypt]                  # Password hashing (if needed later)
 python-multipart                 # Form data parsing
 
 # Database - Firebase/Firestore
-firebase-admin                   # Firebase Admin SDK for Firestore
-google-cloud-firestore           # Google Cloud Firestore client
+firebase-admin           # Firebase Admin SDK for Firestore
+google-cloud-firestore   # Google Cloud Firestore client
+google-auth           # Google authentication library
+google-cloud-core        # Google Cloud core utilities
 
 # HTTP Client
 httpx                            # Async HTTP client (for external API calls)

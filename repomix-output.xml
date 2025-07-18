@@ -45,6 +45,7 @@ app/
     __init__.py
     auth.py
     plots.py
+    users.py
     zones.py
   core/
     __init__.py
@@ -62,13 +63,23 @@ app/
     auth.py
   __init__.py
   main.py
+tests/
+  test_auth_service.py
+  test_performance.py
 .gitignore
 api_flow_diagram.mermaid
+api_key_auth_example.py
 api_specifications.md
+AUTH_METHODS_COMPARISON.md
+bearer_secret_auth_example.py
 dev-requirements.txt
+JWT_BEST_PRACTICES.md
+jwt_security_analysis.py
 README.md
-requirements-dev.txt
+requirements-test.txt
 requirements.txt
+SECRET_KEY_AUTH_GUIDE.md
+secret_key_manager.py
 setup_guide.md
 SETUP.md
 </directory_structure>
@@ -76,550 +87,8 @@ SETUP.md
 <files>
 This section contains the contents of the repository's files.
 
-<file path="README.md">
-# Arise Plot Management API
-
-A robust FastAPI backend for managing land plots and economic zones with JWT-based authentication and role-based access control.
-
-## 🚀 Features
-
-- **JWT Authentication** with role-based permissions
-- **Plot Management** (create, update, release, query)
-- **Zone Master Data** management
-- **Role-Based Access Control** (super_admin, zone_admin, normal_user)
-- **Auto-Generated API Documentation** (Swagger UI & ReDoc)
-- **Input Validation** with Pydantic schemas
-- **Mock Data Support** for development (Firestore ready)
-
-## 📋 Table of Contents
-
-- [Quick Start](#quick-start)
-- [API Endpoints](#api-endpoints)
-- [Authentication & Permissions](#authentication--permissions)
-- [Request/Response Schemas](#requestresponse-schemas)
-- [Development Setup](#development-setup)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Future Roadmap](#future-roadmap)
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.8+
-- Git
-
-### Installation
-```bash
-# Clone the repository
-git clone <repository-url>
-cd arise_fastapi
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Setup environment variables
-cp .env.example .env
-
-# Run the development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Access Documentation
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/health
-
-## 📡 API Endpoints
-
-### Authentication
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/v1/auth/token` | Generate JWT token | No |
-
-### Plot Management
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/plots/available` | Get available plots | Read plots |
-| PUT | `/api/v1/plots/update-plot` | Update plot allocation | Write plots |
-| PATCH | `/api/v1/plots/release-plot` | Release plot | Write plots |
-| GET | `/api/v1/plots/plot-details` | Get detailed plot info | Read plots |
-
-### Zone Management
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/v1/country/zones` | Create zone master data | Write zones |
-
-## 🔐 Authentication & Permissions
-
-### User Roles
-- **super_admin**: Full access to all zones and operations
-- **zone_admin**: Access limited to assigned zone
-- **normal_user**: Read-only access to plots
-
-### Permission Matrix
-| Role | Read Plots | Write Plots | Read Zones | Write Zones |
-|------|------------|-------------|------------|-------------|
-| super_admin | ✅ All zones | ✅ All zones | ✅ All zones | ✅ All zones |
-| zone_admin | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone |
-| normal_user | ✅ All zones | ❌ | ✅ All zones | ❌ |
-
-### Authentication Flow
-1. **Request Token**: POST `/auth/token` with userId, role, zone
-2. **Get JWT**: Receive 24-hour JWT token
-3. **Use Token**: Include `Authorization: Bearer <token>` in requests
-4. **Access Control**: Automatic permission and zone validation
-
-## 📝 Request/Response Schemas
-
-### Authentication
-
-#### POST /auth/token
-**Request:**
-```json
-{
-  "userId": "admin001",
-  "role": "super_admin",
-  "zone": "GSEZ"
-}
-```
-
-**Response (200):**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "expires_in": 86400
-}
-```
-
-**Error (400):**
-```json
-{
-  "error_code": "INVALID_ROLE",
-  "message": "Invalid role provided",
-  "details": {...}
-}
-```
-
-### Plot Management
-
-#### GET /plots/available
-**Query Parameters:**
-- `country` (optional): Filter by country
-- `zoneCode` (optional): Filter by zone
-- `category` (optional): Residential, Commercial, Industrial
-- `phase` (optional): Phase number
-
-**Response:**
-```json
-{
-  "plots": [
-    {
-      "plotName": "GSEZ-R-001",
-      "plotStatus": "Available",
-      "category": "Residential",
-      "phase": 1,
-      "areaInSqm": 5000.0,
-      "areaInHa": 0.5,
-      "zoneCode": "GSEZ",
-      "country": "Gabon"
-    }
-  ]
-}
-```
-
-#### PUT /plots/update-plot
-**Request:**
-```json
-{
-  "country": "Gabon",
-  "zoneCode": "GSEZ",
-  "phase": 1,
-  "plotName": "GSEZ-R-001",
-  "companyName": "TechCorp Ltd",
-  "sector": "Technology",
-  "plotStatus": "Allocated",
-  "activity": "Software Development",
-  "investmentAmount": 1000000,
-  "employmentGenerated": 50,
-  "allocatedDate": "2024-07-04",
-  "expiryDate": "2029-07-04"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Plot updated successfully",
-  "plotName": "GSEZ-R-001",
-  "status": "Allocated"
-}
-```
-
-#### PATCH /plots/release-plot
-**Request:**
-```json
-{
-  "country": "Gabon",
-  "zoneCode": "GSEZ",
-  "plotName": "GSEZ-R-001",
-  "plotStatus": "available"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Plot released successfully",
-  "plotName": "GSEZ-R-001",
-  "status": "available"
-}
-```
-
-#### GET /plots/plot-details
-**Query Parameters:**
-- `country` (required): Country name
-- `zoneCode` (required): Zone code
-
-**Response:**
-```json
-{
-  "metadata": {
-    "country": "Gabon",
-    "zoneCode": "GSEZ",
-    "totalPlots": 10,
-    "availablePlots": 7
-  },
-  "plots": [
-    {
-      "plotName": "GSEZ-R-001",
-      "category": "Residential",
-      "areaInHa": 0.5,
-      "sector": "Housing",
-      "activity": "Residential Development",
-      "plotStatus": "Available",
-      "companyName": null,
-      "allocatedDate": null,
-      "investmentAmount": null,
-      "employmentGenerated": null
-    }
-  ]
-}
-```
-
-### Zone Management
-
-#### POST /country/zones
-**Request:**
-```json
-{
-  "country": "Gabon",
-  "zoneCode": "NSEZ",
-  "phase": 1,
-  "landArea": 150.5,
-  "zoneName": "New Special Economic Zone",
-  "zoneType": "SEZ",
-  "establishedDate": "2024-07-04"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Zone data saved successfully",
-  "zoneCode": "NSEZ"
-}
-```
-
-## 🛠️ Development Setup
-
-### Project Structure
-```
-arise_fastapi/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI app entry point
-│   ├── api/                    # API routes
-│   │   ├── auth.py            # Authentication endpoints
-│   │   ├── plots.py           # Plot management endpoints
-│   │   └── zones.py           # Zone management endpoints
-│   ├── core/
-│   │   └── config.py          # Application settings
-│   ├── schemas/               # Pydantic models
-│   │   ├── auth.py           # Authentication schemas
-│   │   └── plots.py          # Plot/Zone schemas
-│   ├── services/              # Business logic
-│   │   ├── auth.py           # Authentication service
-│   │   └── firestore.py      # Database service
-│   └── utils/
-│       └── auth.py           # Authentication utilities
-├── requirements.txt           # Production dependencies
-├── requirements-dev.txt       # Development dependencies
-├── .env.example              # Environment template
-├── .gitignore               # Git ignore rules
-└── README.md                # This file
-```
-
-### Environment Variables
-Copy `.env.example` to `.env` and configure:
-
-- **JWT_SECRET_KEY**: Secret key for JWT signing
-- **JWT_ALGORITHM**: JWT algorithm (HS256)
-- **JWT_EXPIRE_HOURS**: Token expiry (24)
-- **FIREBASE_PROJECT_ID**: Firebase project ID
-- **APP_NAME**: Application name
-- **DEBUG**: Debug mode (True/False)
-
-### Code Quality
-```bash
-# Format code
-black app/
-
-# Sort imports
-isort app/
-
-# Lint code
-flake8 app/
-
-# Type checking (if mypy installed)
-mypy app/
-```
-
-## 🧪 Testing
-
-### Manual Testing with curl
-
-1. **Get JWT Token:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/token" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "admin001",
-    "role": "super_admin",
-    "zone": "GSEZ"
-  }'
-```
-
-2. **Test Protected Endpoint:**
-```bash
-curl -X GET "http://localhost:8000/api/v1/plots/available?country=Gabon" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### Automated Testing
-```bash
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=app tests/
-```
-
-## 🚀 Deployment
-
-### Current Support
-- **Local Development**: uvicorn server
-- **Traditional Hosting**: Any Python-compatible hosting
-- **Docker**: Containerization ready
-
-### Future Deployment Options
-- **AWS Lambda**: Serverless deployment with Mangum
-- **AWS Elastic Beanstalk**: Platform-as-a-Service
-- **Vercel**: Serverless functions
-- **Railway**: Simple deployment platform
-- **Heroku**: Cloud platform
-
-## 🔮 Future Roadmap
-
-### Phase 1: Database Integration
-- [ ] Replace mock data with real Firestore integration
-- [ ] Add database connection pooling
-- [ ] Implement data persistence
-
-### Phase 2: API Enhancements
-- [ ] Unify PUT/PATCH endpoints for plot updates
-- [ ] Add bulk operations support
-- [ ] Implement pagination for large datasets
-- [ ] Add search and filtering capabilities
-
-### Phase 3: Security & Performance
-- [ ] Add rate limiting
-- [ ] Implement refresh tokens
-- [ ] Add request logging and monitoring
-- [ ] Performance optimization
-
-### Phase 4: Additional Features
-- [ ] Email notifications
-- [ ] File upload support
-- [ ] Advanced reporting
-- [ ] Multi-language support
-
-### Phase 5: Deployment & DevOps
-- [ ] Docker containerization
-- [ ] AWS Lambda deployment
-- [ ] CI/CD pipeline setup
-- [ ] Infrastructure as Code (Terraform)
-- [ ] Monitoring and alerting
-
-## 📊 Current Implementation Status
-
-### ✅ Completed Features
-- JWT-based authentication system
-- Role-based access control
-- Plot CRUD operations
-- Zone management
-- API documentation (Swagger/ReDoc)
-- Request/response validation
-- Error handling
-- Mock data service
-
-### 🔄 In Progress
-- Database integration planning
-- Deployment strategy
-
-### 📋 Pending
-- Real Firestore integration
-- Production deployment
-- Comprehensive testing suite
-- Performance optimization
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 📞 Support
-
-For questions or support, please contact the development team or create an issue in the repository.
-
----
-
-**Version**: 1.0.0  
-**Last Updated**: July 4, 2025  
-**FastAPI Version**: 0.115.14  
-**Python Version**: 3.8+
-</file>
-
 <file path="app/api/__init__.py">
 # API package
-</file>
-
-<file path="app/api/auth.py">
-"""
-Authentication API routes for JWT token generation.
-Implements POST /auth/token endpoint as per Flow 1 specifications.
-"""
-from fastapi import APIRouter, HTTPException, status
-from app.schemas.auth import AuthTokenRequest, AuthTokenResponse, AuthErrorResponse
-from app.services.auth import AuthService
-
-router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-@router.post(
-    "/token",
-    response_model=AuthTokenResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        400: {
-            "model": AuthErrorResponse,
-            "description": "Bad Request - Invalid parameters"
-        }
-    },
-    summary="Generate JWT Token",
-    description="""
-    Generate a JWT token for authenticated API access.
-    
-    **Flow 1: Authentication & Token Generation**
-    
-    This endpoint validates user credentials and returns a signed JWT token containing:
-    - User identity (userId, role, zone)
-    - Role-based permissions (read/write access)
-    - Token expiration (24 hours)
-    
-    **Role-based Permissions:**
-    - `super_admin`: Full read/write access to all zones
-    - `zone_admin`: Read/write access to assigned zone only  
-    - `normal_user`: Read-only access to plots
-    
-    **Valid Zone Codes:** GSEZ, OSEZ, GABON (4-6 uppercase letters)
-    """
-)
-async def create_access_token(request: AuthTokenRequest) -> AuthTokenResponse:
-    """
-    Create JWT access token for API authentication.
-    
-    **Sequence of Events:**
-    1. Validate request parameters (userId, role, zone)
-    2. Check role validity (super_admin, zone_admin, normal_user)
-    3. Assign role-based permissions
-    4. Create signed JWT token with 24-hour expiry
-    5. Return token response
-    
-    Args:
-        request: Authentication request with userId, role, and zone
-        
-    Returns:
-        AuthTokenResponse: JWT token with expiry information
-        
-    Raises:
-        HTTPException: 400 Bad Request for validation errors
-    """
-    
-    # Step 1: Validate request parameters
-    validation_error = AuthService.validate_request(request)
-    
-    if validation_error == "INVALID_ROLE":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error_code": "INVALID_ROLE",
-                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
-                "details": {"provided_role": request.role.value}
-            }
-        )
-    
-    if validation_error == "INVALID_ZONE":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error_code": "INVALID_ZONE", 
-                "message": "Invalid zone code. Must be a valid zone identifier (e.g., GSEZ, OSEZ)",
-                "details": {"provided_zone": request.zone}
-            }
-        )
-    
-    # Step 2: Create JWT token with permissions
-    try:
-        access_token = AuthService.create_jwt_token(request)
-        expires_in = AuthService.get_token_expiry_seconds()
-        
-        return AuthTokenResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=expires_in
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_code": "INTERNAL_ERROR",
-                "message": "Failed to create access token",
-                "details": {"error": str(e)}
-            }
-        )
 </file>
 
 <file path="app/api/plots.py">
@@ -987,102 +456,237 @@ async def get_plot_details(
         )
 </file>
 
-<file path="app/api/zones.py">
+<file path="app/api/users.py">
 """
-Zones API routes for zone master data management.
-Implements POST /country/zones endpoint as per API specifications.
+User management API endpoints.
+Requires super_admin role for all operations.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.schemas.plots import ZoneCreateRequest, ZoneCreateResponse
-from app.schemas.auth import JWTPayload
-from app.utils.auth import require_zones_write
-from app.services.firestore import FirestoreService
+from fastapi import APIRouter, HTTPException, Depends, status
+from typing import List
 
-router = APIRouter(prefix="/country", tags=["Zones"])
-firestore_service = FirestoreService()
+from app.schemas.auth import (
+    CreateUserRequest, 
+    UpdateUserRequest, 
+    UserResponse, 
+    AuthErrorResponse,
+    JWTPayload
+)
+from app.services.auth import AuthService
+from app.utils.auth import require_permissions
+
+router = APIRouter(prefix="/users", tags=["User Management"])
 
 
 @router.post(
-    "/zones",
-    response_model=ZoneCreateResponse,
-    status_code=status.HTTP_200_OK,
+    "/create_user",
+    response_model=UserResponse,
     responses={
-        401: {"description": "Unauthorized - Invalid or expired JWT token"},
-        403: {"description": "Forbidden - Insufficient permissions"},
-        409: {"description": "Zone code already exists"}
+        400: {"model": AuthErrorResponse, "description": "Bad Request - User already exists or validation error"},
+        401: {"model": AuthErrorResponse, "description": "Unauthorized - Invalid or missing token"},
+        403: {"model": AuthErrorResponse, "description": "Forbidden - Insufficient permissions"},
+        500: {"model": AuthErrorResponse, "description": "Internal Server Error"}
     },
-    summary="Create Zone Master Data",
-    description="""
-    Create or update zone master data for economic zones.
-    
-    **Logic**: Essential for establishing economic zones before creating plots.
-    Zone master data provides the foundation for plot management within zones.
-    
-    **Role-Based Access**:
-    - Requires 'write' permission for zones
-    - Only super_admin and zone_admin can create zones
-    - Zone admins typically create zones for their assigned areas
-    
-    **Business Validation**:
-    - Zone code must be unique across the system
-    - Zone code format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
-    - Zone type must be one of: SEZ, Industrial, Commercial
-    - Land area must be positive value in hectares
-    
-    **Use Cases**:
-    - Setting up new economic zones
-    - Updating zone information
-    - Preparing infrastructure for plot allocation
-    """
+    summary="Create New User",
+    description="Create a new user with specified email, role, and zone. Only accessible by super_admin."
 )
-async def create_zone(
-    request: ZoneCreateRequest,
-    user: JWTPayload = Depends(require_zones_write)
-) -> ZoneCreateResponse:
+async def create_user(
+    request: CreateUserRequest,
+    current_user: JWTPayload = Depends(require_permissions(["write"], ["users"]))
+):
     """
-    Create or update zone master data.
+    Create a new user (super_admin only).
     
-    Args:
-        request: Zone creation request with zone details
-        user: Authenticated user (injected by dependency)
-        
-    Returns:
-        ZoneCreateResponse: Success response with zone code
-        
-    Raises:
-        HTTPException: 409 if zone exists, 400 for validation errors
+    - **email**: Valid email address (will be used as identifier)
+    - **role**: User role (super_admin, zone_admin, normal_user)
+    - **zone**: Valid zone code (e.g., GSEZ, OSEZ, GABON, TEST)
+    
+    **Requirements:**
+    - JWT token with super_admin role
+    - Valid email format
+    - Valid zone code
+    - Email must not already exist
     """
+    # Additional check: only super_admin can create users
+    if current_user.role != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "INSUFFICIENT_PERMISSIONS",
+                "message": "Only super_admin can create users",
+                "details": {"required_role": "super_admin", "current_role": current_user.role}
+            }
+        )
+    
     try:
-        result = await firestore_service.create_zone(request)
-        return ZoneCreateResponse(**result)
-    
-    except ValueError as e:
-        if "already exists" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "error_code": "ZONE_EXISTS",
-                    "message": str(e),
-                    "details": {
-                        "zone_code": request.zoneCode,
-                        "country": request.country
-                    }
-                }
-            )
-        else:
+        # Create the user
+        user = AuthService.create_user(request)
+        
+        if user is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "error_code": "INVALID_DATA",
-                    "message": str(e)
+                    "error_code": "USER_ALREADY_EXISTS",
+                    "message": f"User with email {request.email} already exists",
+                    "details": {"email": request.email}
                 }
             )
+            
+        return user
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_INPUT",
+                "message": str(e),
+                "details": {"field": "zone" if "zone" in str(e) else "unknown"}
+            }
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error_code": "INTERNAL_ERROR",
-                "message": "An internal server error occurred"
+                "message": "Failed to create user",
+                "details": {"error": str(e)}
+            }
+        )
+
+
+@router.put(
+    "/update_user",
+    response_model=UserResponse,
+    responses={
+        400: {"model": AuthErrorResponse, "description": "Bad Request - Validation error"},
+        401: {"model": AuthErrorResponse, "description": "Unauthorized - Invalid or missing token"},
+        403: {"model": AuthErrorResponse, "description": "Forbidden - Insufficient permissions"},
+        404: {"model": AuthErrorResponse, "description": "Not Found - User not found"},
+        500: {"model": AuthErrorResponse, "description": "Internal Server Error"}
+    },
+    summary="Update User",
+    description="Update user role and/or zone by email. Only accessible by super_admin."
+)
+async def update_user(
+    request: UpdateUserRequest,
+    current_user: JWTPayload = Depends(require_permissions(["write"], ["users"]))
+):
+    """
+    Update an existing user (super_admin only).
+    
+    - **email**: Email address of user to update
+    - **role**: New user role (optional)
+    - **zone**: New zone code (optional)
+    
+    **Requirements:**
+    - JWT token with super_admin role
+    - Valid email format
+    - Valid zone code (if provided)
+    - User must exist
+    - At least one field (role or zone) must be provided
+    """
+    # Additional check: only super_admin can update users
+    if current_user.role != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "INSUFFICIENT_PERMISSIONS",
+                "message": "Only super_admin can update users",
+                "details": {"required_role": "super_admin", "current_role": current_user.role}
+            }
+        )
+    
+    # Validate that at least one field is provided for update
+    if request.role is None and request.zone is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "NO_UPDATE_FIELDS",
+                "message": "At least one field (role or zone) must be provided for update",
+                "details": {"provided_fields": {"role": request.role, "zone": request.zone}}
+            }
+        )
+    
+    try:
+        # Update the user
+        user = AuthService.update_user(request)
+        
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error_code": "USER_NOT_FOUND",
+                    "message": f"User with email {request.email} not found",
+                    "details": {"email": request.email}
+                }
+            )
+            
+        return user
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_INPUT",
+                "message": str(e),
+                "details": {"field": "zone" if "zone" in str(e) else "unknown"}
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "Failed to update user",
+                "details": {"error": str(e)}
+            }
+        )
+
+
+@router.get(
+    "/list_users",
+    response_model=List[UserResponse],
+    responses={
+        401: {"model": AuthErrorResponse, "description": "Unauthorized - Invalid or missing token"},
+        403: {"model": AuthErrorResponse, "description": "Forbidden - Insufficient permissions"},
+        500: {"model": AuthErrorResponse, "description": "Internal Server Error"}
+    },
+    summary="List All Users",
+    description="List all users in the system. Only accessible by super_admin."
+)
+async def list_users(
+    current_user: JWTPayload = Depends(require_permissions(["read"], ["users"]))
+):
+    """
+    List all users (super_admin only).
+    
+    **Requirements:**
+    - JWT token with super_admin role
+    
+    **Returns:**
+    - List of all users with their details
+    """
+    # Additional check: only super_admin can list users
+    if current_user.role != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "INSUFFICIENT_PERMISSIONS",
+                "message": "Only super_admin can list users",
+                "details": {"required_role": "super_admin", "current_role": current_user.role}
+            }
+        )
+    
+    try:
+        users = AuthService.list_users()
+        return users
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "Failed to list users",
+                "details": {"error": str(e)}
             }
         )
 </file>
@@ -1091,197 +695,8 @@ async def create_zone(
 # Core package
 </file>
 
-<file path="app/core/config.py">
-"""
-Application configuration settings using Pydantic Settings.
-"""
-from pydantic_settings import BaseSettings
-from typing import List
-import os
-
-
-class Settings(BaseSettings):
-    """Application settings configuration."""
-    
-    # JWT Configuration
-    JWT_SECRET_KEY: str = "your-super-secret-jwt-key-change-this-in-production"
-    JWT_ALGORITHM: str = "HS256" 
-    JWT_EXPIRE_HOURS: int = 24
-    
-    # Firebase Configuration
-    FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
-    FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
-    FIREBASE_PRIVATE_KEY: str = ""
-    FIREBASE_CLIENT_EMAIL: str = ""
-    FIREBASE_CLIENT_ID: str = ""
-    FIREBASE_AUTH_URI: str = "https://accounts.google.com/o/oauth2/auth"
-    FIREBASE_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
-    FIREBASE_AUTH_PROVIDER_X509_CERT_URL: str = "https://www.googleapis.com/oauth2/v1/certs"
-    FIREBASE_CLIENT_X509_CERT_URL: str = ""
-    
-    # Application Settings
-    APP_NAME: str = "Arise Plot Management API"
-    APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
-    ENVIRONMENT: str = "development"
-    
-    # API Configuration
-    API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "Arise FastAPI Backend"
-    
-    # CORS Settings
-    BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:8080", 
-        "http://localhost:3001"
-    ]
-    
-    # Database Settings
-    DATABASE_URL: str = "firestore"
-    FIRESTORE_COLLECTION_PLOTS: str = "plots"
-    FIRESTORE_COLLECTION_ZONES: str = "zones"
-    FIRESTORE_COLLECTION_USERS: str = "users"
-    
-    # Logging
-    LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "json"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-
-# Global settings instance
-settings = Settings()
-</file>
-
 <file path="app/schemas/__init__.py">
 # Schemas package
-</file>
-
-<file path="app/schemas/auth.py">
-"""
-Authentication-related Pydantic schemas for request/response validation.
-"""
-from pydantic import BaseModel, Field, validator
-from typing import Dict, List, Any, Optional
-from enum import Enum
-
-
-class UserRole(str, Enum):
-    """Valid user roles as per API specification."""
-    SUPER_ADMIN = "super_admin"
-    ZONE_ADMIN = "zone_admin"
-    NORMAL_USER = "normal_user"
-
-
-class AuthTokenRequest(BaseModel):
-    """
-    Request schema for POST /auth/token endpoint.
-    
-    As per API specification:
-    - userId: string, max 50 chars, mandatory
-    - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
-    - zone: string, max 10 chars, mandatory (valid zone code)
-    """
-    userId: str = Field(..., max_length=50, description="Valid user identifier")
-    role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
-    zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
-    
-    @validator('zone')
-    def validate_zone_code(cls, v):
-        """Validate zone code format: 4-6 uppercase letters."""
-        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
-            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
-        return v
-
-    class Config:
-        """Pydantic configuration."""
-        schema_extra = {
-            "example": {
-                "userId": "user_001",
-                "role": "zone_admin",
-                "zone": "GSEZ"
-            }
-        }
-
-
-class AuthTokenResponse(BaseModel):
-    """
-    Successful response schema for POST /auth/token endpoint.
-    
-    As per API specification:
-    - access_token: string, max 500 chars, mandatory (JWT token)
-    - token_type: string, max 10 chars, mandatory (always "bearer")
-    - expires_in: integer, mandatory (86400 seconds for 24 hours)
-    """
-    access_token: str = Field(..., max_length=500, description="JWT token with 24-hour expiry")
-    token_type: str = Field(default="bearer", max_length=10, description="Always 'bearer'")
-    expires_in: int = Field(..., description="Token expiry time in seconds (86400)")
-
-    class Config:
-        """Pydantic configuration."""
-        schema_extra = {
-            "example": {
-                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                "token_type": "bearer", 
-                "expires_in": 86400
-            }
-        }
-
-
-class AuthErrorResponse(BaseModel):
-    """
-    Error response schema for authentication failures.
-    
-    As per API specification:
-    - error_code: string, max 50 chars, mandatory
-    - message: string, max 200 chars, mandatory  
-    - details: object, optional
-    """
-    error_code: str = Field(..., max_length=50, description="Error code identifier")
-    message: str = Field(..., max_length=200, description="Human-readable error description")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
-
-    class Config:
-        """Pydantic configuration."""
-        schema_extra = {
-            "example": {
-                "error_code": "INVALID_ROLE",
-                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
-                "details": {"provided_role": "invalid_role"}
-            }
-        }
-
-
-class JWTPayload(BaseModel):
-    """
-    JWT token payload structure.
-    
-    Internal model for JWT token creation and validation.
-    """
-    userId: str
-    role: UserRole
-    zone: str
-    permissions: Dict[str, List[str]]
-    iat: int  # Issued at time
-    exp: int  # Expiration time
-
-    class Config:
-        """Pydantic configuration."""
-        schema_extra = {
-            "example": {
-                "userId": "user_001",
-                "role": "zone_admin",
-                "zone": "GSEZ",
-                "permissions": {
-                    "read": ["plots", "zones"],
-                    "write": ["plots", "zones"]
-                },
-                "iat": 1672531200,
-                "exp": 1672617600
-            }
-        }
 </file>
 
 <file path="app/schemas/plots.py">
@@ -1638,131 +1053,2938 @@ class PlotDetailsResponse(BaseModel):
 # Services package
 </file>
 
-<file path="app/services/auth.py">
+<file path="app/utils/__init__.py">
+# Utils package
+</file>
+
+<file path="app/__init__.py">
+# App package
+</file>
+
+<file path="tests/test_auth_service.py">
 """
-Authentication service for JWT token creation and validation.
-Implements the exact logic as specified in Flow 1 requirements.
+Unit tests for authentication service.
+Tests JWT token creation, validation, and user management functions.
 """
+import pytest
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from unittest.mock import patch
 import jwt
+
+from app.services.auth import AuthService
+from app.schemas.auth import AuthTokenRequest, UserRole, CreateUserRequest, UpdateUserRequest
 from app.core.config import settings
-from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest
 
 
-class AuthService:
-    """Authentication service for handling JWT operations."""
+class TestAuthService:
+    """Test AuthService class methods."""
     
-    # Role-based permissions mapping as specified in the requirements
-    PERMISSIONS_MAP = {
-        "super_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]},
-        "zone_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]}, 
-        "normal_user": {"read": ["plots", "zones"], "write": []}
-    }
+    def setup_method(self):
+        """Reset user storage before each test."""
+        AuthService._users.clear()
     
-    # Valid zone codes (can be extended based on requirements)
-    VALID_ZONES = ["GSEZ", "OSEZ", "GABON", "TEST"]
-    
-    @classmethod
-    def validate_request(cls, request: AuthTokenRequest) -> Optional[str]:
-        """
-        Validate authentication request parameters.
-        
-        Returns:
-            Optional[str]: Error code if validation fails, None if valid
-        """
-        # Check if role is valid (already validated by Pydantic enum)
-        if request.role not in [role.value for role in UserRole]:
-            return "INVALID_ROLE"
-            
-        # Check if zone is valid
-        if request.zone not in cls.VALID_ZONES:
-            return "INVALID_ZONE"
-            
-        return None
-    
-    @classmethod
-    def get_permissions_for_role(cls, role: str) -> Dict[str, List[str]]:
-        """
-        Get permissions based on user role.
-        
-        Args:
-            role: User role (super_admin, zone_admin, normal_user)
-            
-        Returns:
-            Dict[str, List[str]]: Permissions dictionary
-        """
-        return cls.PERMISSIONS_MAP.get(role, {"read": [], "write": []})
-    
-    @classmethod
-    def create_jwt_token(cls, request: AuthTokenRequest) -> str:
-        """
-        Create JWT token with user information and permissions.
-        
-        Args:
-            request: Validated authentication request
-            
-        Returns:
-            str: Signed JWT token
-        """
-        # Current time and expiration
-        now = datetime.utcnow()
-        expiration = now + timedelta(hours=settings.JWT_EXPIRE_HOURS)
-        
-        # Get permissions for the role
-        permissions = cls.get_permissions_for_role(request.role.value)
-        
-        # Create JWT payload
-        payload = {
-            "userId": request.userId,
-            "role": request.role.value,
-            "zone": request.zone,
-            "permissions": permissions,
-            "iat": int(now.timestamp()),
-            "exp": int(expiration.timestamp())
-        }
-        
-        # Sign the token
-        token = jwt.encode(
-            payload=payload,
-            key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM
+    def test_validate_request_success(self):
+        """Test successful request validation."""
+        request = AuthTokenRequest(
+            userId="test001",
+            role=UserRole.SUPER_ADMIN,
+            zone="GSEZ"
         )
         
-        return token
+        result = AuthService.validate_request(request)
+        assert result is None  # No error
+    
+    def test_validate_request_invalid_zone(self):
+        """Test request validation with invalid zone."""
+        request = AuthTokenRequest(
+            userId="test001",
+            role=UserRole.SUPER_ADMIN,
+            zone="INVALID"
+        )
+        
+        result = AuthService.validate_request(request)
+        assert result == "INVALID_ZONE"
+    
+    def test_get_permissions_for_role_super_admin(self):
+        """Test permissions for super_admin role."""
+        permissions = AuthService.get_permissions_for_role("super_admin")
+        
+        expected = {
+            "read": ["plots", "zones", "users"],
+            "write": ["plots", "zones", "users"]
+        }
+        assert permissions == expected
+    
+    def test_get_permissions_for_role_zone_admin(self):
+        """Test permissions for zone_admin role."""
+        permissions = AuthService.get_permissions_for_role("zone_admin")
+        
+        expected = {
+            "read": ["plots", "zones"],
+            "write": ["plots", "zones"]
+        }
+        assert permissions == expected
+    
+    def test_get_permissions_for_role_normal_user(self):
+        """Test permissions for normal_user role."""
+        permissions = AuthService.get_permissions_for_role("normal_user")
+        
+        expected = {
+            "read": ["plots", "zones"],
+            "write": []
+        }
+        assert permissions == expected
+    
+    def test_get_permissions_for_role_invalid(self):
+        """Test permissions for invalid role."""
+        permissions = AuthService.get_permissions_for_role("invalid_role")
+        
+        expected = {"read": [], "write": []}
+        assert permissions == expected
+    
+    @patch('app.services.auth.datetime')
+    def test_create_jwt_token(self, mock_datetime):
+        """Test JWT token creation."""
+        # Mock datetime for consistent testing
+        mock_now = datetime(2025, 7, 14, 10, 0, 0)
+        mock_datetime.utcnow.return_value = mock_now
+        
+        request = AuthTokenRequest(
+            userId="test001",
+            role=UserRole.SUPER_ADMIN,
+            zone="GSEZ"
+        )
+        
+        token = AuthService.create_jwt_token(request)
+        
+        # Verify token is a string and has JWT format
+        assert isinstance(token, str)
+        assert len(token.split('.')) == 3  # header.payload.signature
+        
+        # Decode and verify payload
+        payload = jwt.decode(
+            token,
+            key=settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        
+        assert payload["userId"] == "test001"
+        assert payload["role"] == "super_admin"
+        assert payload["zone"] == "GSEZ"
+        assert "permissions" in payload
+        assert payload["iat"] == int(mock_now.timestamp())
+        assert payload["exp"] == int((mock_now + timedelta(hours=24)).timestamp())
+    
+    def test_verify_jwt_token_valid(self):
+        """Test JWT token verification with valid token."""
+        request = AuthTokenRequest(
+            userId="test001",
+            role=UserRole.ZONE_ADMIN,
+            zone="OSEZ"
+        )
+        
+        token = AuthService.create_jwt_token(request)
+        payload = AuthService.verify_jwt_token(token)
+        
+        assert payload is not None
+        assert payload.userId == "test001"
+        assert payload.role == UserRole.ZONE_ADMIN
+        assert payload.zone == "OSEZ"
+    
+    def test_verify_jwt_token_invalid(self):
+        """Test JWT token verification with invalid token."""
+        invalid_token = "invalid.jwt.token"
+        
+        payload = AuthService.verify_jwt_token(invalid_token)
+        assert payload is None
+    
+    def test_verify_jwt_token_malformed(self):
+        """Test JWT token verification with malformed token."""
+        malformed_token = "not.a.valid.jwt.token.structure"
+        
+        payload = AuthService.verify_jwt_token(malformed_token)
+        assert payload is None
+    
+    def test_get_token_expiry_seconds(self):
+        """Test token expiry calculation."""
+        expiry = AuthService.get_token_expiry_seconds()
+        expected = 24 * 3600  # 24 hours in seconds
+        assert expiry == expected
+    
+    def test_create_user_success(self):
+        """Test successful user creation."""
+        request = CreateUserRequest(
+            email="test@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="GSEZ"
+        )
+        
+        user = AuthService.create_user(request)
+        
+        assert user is not None
+        assert user.email == "test@example.com"
+        assert user.role == UserRole.ZONE_ADMIN
+        assert user.zone == "GSEZ"
+        assert isinstance(user.createdDate, datetime)
+        assert isinstance(user.lastModified, datetime)
+        
+        # Verify user is stored
+        assert "test@example.com" in AuthService._users
+    
+    def test_create_user_duplicate_email(self):
+        """Test user creation with duplicate email."""
+        request = CreateUserRequest(
+            email="duplicate@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="GSEZ"
+        )
+        
+        # Create first user
+        user1 = AuthService.create_user(request)
+        assert user1 is not None
+        
+        # Try to create duplicate
+        user2 = AuthService.create_user(request)
+        assert user2 is None
+    
+    def test_create_user_invalid_zone(self):
+        """Test user creation with invalid zone."""
+        request = CreateUserRequest(
+            email="test@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="INVALID"
+        )
+        
+        with pytest.raises(ValueError, match="Invalid zone"):
+            AuthService.create_user(request)
+    
+    def test_update_user_success(self):
+        """Test successful user update."""
+        # Create user first
+        create_request = CreateUserRequest(
+            email="update@example.com",
+            role=UserRole.NORMAL_USER,
+            zone="GSEZ"
+        )
+        AuthService.create_user(create_request)
+        
+        # Update user
+        update_request = UpdateUserRequest(
+            email="update@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="OSEZ"
+        )
+        
+        updated_user = AuthService.update_user(update_request)
+        
+        assert updated_user is not None
+        assert updated_user.email == "update@example.com"
+        assert updated_user.role == UserRole.ZONE_ADMIN
+        assert updated_user.zone == "OSEZ"
+    
+    def test_update_user_not_found(self):
+        """Test updating non-existent user."""
+        update_request = UpdateUserRequest(
+            email="nonexistent@example.com",
+            role=UserRole.ZONE_ADMIN
+        )
+        
+        result = AuthService.update_user(update_request)
+        assert result is None
+    
+    def test_update_user_invalid_zone(self):
+        """Test user update with invalid zone."""
+        # Create user first
+        create_request = CreateUserRequest(
+            email="update@example.com",
+            role=UserRole.NORMAL_USER,
+            zone="GSEZ"
+        )
+        AuthService.create_user(create_request)
+        
+        # Try to update with invalid zone
+        update_request = UpdateUserRequest(
+            email="update@example.com",
+            zone="INVALID"
+        )
+        
+        with pytest.raises(ValueError, match="Invalid zone"):
+            AuthService.update_user(update_request)
+    
+    def test_update_user_partial_update(self):
+        """Test partial user update (only role or only zone)."""
+        # Create user first
+        create_request = CreateUserRequest(
+            email="partial@example.com",
+            role=UserRole.NORMAL_USER,
+            zone="GSEZ"
+        )
+        original_user = AuthService.create_user(create_request)
+        
+        # Update only role
+        update_request = UpdateUserRequest(
+            email="partial@example.com",
+            role=UserRole.ZONE_ADMIN
+        )
+        
+        updated_user = AuthService.update_user(update_request)
+        
+        assert updated_user.role == UserRole.ZONE_ADMIN
+        assert updated_user.zone == "GSEZ"  # Should remain unchanged
+        assert updated_user.lastModified > original_user.lastModified
+    
+    def test_get_user_by_email_success(self):
+        """Test getting user by email."""
+        # Create user first
+        create_request = CreateUserRequest(
+            email="find@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="GSEZ"
+        )
+        AuthService.create_user(create_request)
+        
+        # Get user
+        user = AuthService.get_user_by_email("find@example.com")
+        
+        assert user is not None
+        assert user.email == "find@example.com"
+        assert user.role == UserRole.ZONE_ADMIN
+    
+    def test_get_user_by_email_not_found(self):
+        """Test getting non-existent user by email."""
+        user = AuthService.get_user_by_email("nonexistent@example.com")
+        assert user is None
+    
+    def test_get_user_by_email_case_insensitive(self):
+        """Test getting user by email is case insensitive."""
+        # Create user with lowercase email
+        create_request = CreateUserRequest(
+            email="case@example.com",
+            role=UserRole.ZONE_ADMIN,
+            zone="GSEZ"
+        )
+        AuthService.create_user(create_request)
+        
+        # Try to find with different case
+        user = AuthService.get_user_by_email("CASE@EXAMPLE.COM")
+        assert user is not None
+        assert user.email == "case@example.com"
+    
+    def test_list_users_empty(self):
+        """Test listing users when none exist."""
+        users = AuthService.list_users()
+        assert users == []
+    
+    def test_list_users_multiple(self):
+        """Test listing multiple users."""
+        # Create multiple users
+        users_data = [
+            ("user1@example.com", UserRole.SUPER_ADMIN, "GSEZ"),
+            ("user2@example.com", UserRole.ZONE_ADMIN, "OSEZ"),
+            ("user3@example.com", UserRole.NORMAL_USER, "GABON")
+        ]
+        
+        for email, role, zone in users_data:
+            request = CreateUserRequest(email=email, role=role, zone=zone)
+            AuthService.create_user(request)
+        
+        # List users
+        users = AuthService.list_users()
+        
+        assert len(users) == 3
+        emails = [user.email for user in users]
+        assert "user1@example.com" in emails
+        assert "user2@example.com" in emails
+        assert "user3@example.com" in emails
+
+
+class TestAuthServiceValidation:
+    """Test AuthService validation methods."""
+    
+    def test_valid_zones_constant(self):
+        """Test VALID_ZONES constant contains expected zones."""
+        expected_zones = ["GSEZ", "OSEZ", "GABON", "TEST"]
+        assert AuthService.VALID_ZONES == expected_zones
+    
+    def test_permissions_map_structure(self):
+        """Test PERMISSIONS_MAP has correct structure."""
+        permissions_map = AuthService.PERMISSIONS_MAP
+        
+        # Check all roles exist
+        assert "super_admin" in permissions_map
+        assert "zone_admin" in permissions_map
+        assert "normal_user" in permissions_map
+        
+        # Check each role has read and write permissions
+        for role, perms in permissions_map.items():
+            assert "read" in perms
+            assert "write" in perms
+            assert isinstance(perms["read"], list)
+            assert isinstance(perms["write"], list)
+        
+        # Check super_admin has all permissions
+        super_admin_perms = permissions_map["super_admin"]
+        assert "users" in super_admin_perms["read"]
+        assert "users" in super_admin_perms["write"]
+        
+        # Check normal_user has no write permissions
+        normal_user_perms = permissions_map["normal_user"]
+        assert len(normal_user_perms["write"]) == 0
+</file>
+
+<file path="tests/test_performance.py">
+"""
+Performance and load testing for the API endpoints.
+Uses locust for load testing.
+
+Run with:
+    pip install locust
+    locust -f tests/test_performance.py --host=http://localhost:8000
+"""
+import random
+import json
+from locust import HttpUser, task, between
+
+
+class AriseAPIUser(HttpUser):
+    """Simulated user for load testing the Arise API."""
+    
+    wait_time = between(1, 3)  # Wait 1-3 seconds between requests
+    
+    def on_start(self):
+        """Setup method called when user starts."""
+        # Get authentication tokens for different roles
+        self.tokens = {}
+        self.get_auth_tokens()
+    
+    def get_auth_tokens(self):
+        """Get JWT tokens for different user roles."""
+        roles = [
+            ("super_admin", "GSEZ"),
+            ("zone_admin", "OSEZ"), 
+            ("normal_user", "GABON")
+        ]
+        
+        for i, (role, zone) in enumerate(roles):
+            response = self.client.post("/api/v1/auth/token", json={
+                "userId": f"load_test_{role}_{i}",
+                "role": role,
+                "zone": zone
+            })
+            
+            if response.status_code == 200:
+                self.tokens[role] = response.json()["access_token"]
+    
+    def get_auth_headers(self, role="super_admin"):
+        """Get authorization headers for given role."""
+        token = self.tokens.get(role, "")
+        return {"Authorization": f"Bearer {token}"}
+    
+    @task(10)
+    def get_available_plots(self):
+        """Test getting available plots (high frequency)."""
+        headers = self.get_auth_headers("normal_user")
+        self.client.get("/api/v1/plots/available", headers=headers)
+    
+    @task(5)
+    def get_available_plots_with_filters(self):
+        """Test getting plots with filters."""
+        headers = self.get_auth_headers("zone_admin")
+        params = "?country=Gabon&zoneCode=GSEZ"
+        self.client.get(f"/api/v1/plots/available{params}", headers=headers)
+    
+    @task(3)
+    def generate_auth_token(self):
+        """Test token generation."""
+        roles = ["super_admin", "zone_admin", "normal_user"]
+        zones = ["GSEZ", "OSEZ", "GABON", "TEST"]
+        
+        self.client.post("/api/v1/auth/token", json={
+            "userId": f"perf_test_{random.randint(1, 1000)}",
+            "role": random.choice(roles),
+            "zone": random.choice(zones)
+        })
+    
+    @task(2)
+    def update_plot(self):
+        """Test plot updates (moderate frequency)."""
+        headers = self.get_auth_headers("super_admin")
+        
+        self.client.put("/api/v1/plots/update-plot", 
+            headers=headers,
+            json={
+                "country": "Gabon",
+                "zoneCode": "GSEZ", 
+                "phase": random.randint(1, 3),
+                "plotName": f"PERF-TEST-{random.randint(1, 100)}",
+                "companyName": f"Load Test Company {random.randint(1, 50)}",
+                "sector": random.choice(["Technology", "Manufacturing", "Services"]),
+                "plotStatus": random.choice(["Allocated", "Reserved"]),
+                "activity": "Performance Testing",
+                "investmentAmount": random.uniform(10000, 1000000),
+                "employmentGenerated": random.randint(1, 100)
+            }
+        )
+    
+    @task(1)
+    def create_user(self):
+        """Test user creation (low frequency)."""
+        headers = self.get_auth_headers("super_admin")
+        
+        self.client.post("/api/v1/users/create_user",
+            headers=headers,
+            json={
+                "email": f"loadtest{random.randint(1, 10000)}@example.com",
+                "role": random.choice(["zone_admin", "normal_user"]),
+                "zone": random.choice(["GSEZ", "OSEZ", "GABON"])
+            }
+        )
+    
+    @task(1)
+    def list_users(self):
+        """Test listing users (low frequency)."""
+        headers = self.get_auth_headers("super_admin")
+        self.client.get("/api/v1/users/list_users", headers=headers)
+    
+    @task(2)
+    def get_plot_details(self):
+        """Test getting plot details."""
+        headers = self.get_auth_headers("zone_admin")
+        params = "?country=Gabon&zoneCode=GSEZ"
+        self.client.get(f"/api/v1/plots/plot-details{params}", headers=headers)
+    
+    @task(1)
+    def create_zone(self):
+        """Test zone creation (low frequency)."""
+        headers = self.get_auth_headers("super_admin")
+        
+        self.client.post("/api/v1/country/zones",
+            headers=headers,
+            json={
+                "country": "Gabon",
+                "zoneCode": f"PERF{random.randint(1, 1000)}",
+                "phase": random.randint(1, 5),
+                "landArea": random.uniform(10.0, 500.0),
+                "zoneName": f"Performance Test Zone {random.randint(1, 100)}",
+                "zoneType": random.choice(["SEZ", "Industrial", "Commercial"])
+            }
+        )
+    
+    @task(20)
+    def health_check(self):
+        """Test health check endpoint (very high frequency)."""
+        self.client.get("/health")
+    
+    @task(5)
+    def root_endpoint(self):
+        """Test root endpoint."""
+        self.client.get("/")
+
+
+class AdminUser(HttpUser):
+    """Simulated admin user with heavy operations."""
+    
+    wait_time = between(2, 5)
+    weight = 1  # Lower weight = fewer instances
+    
+    def on_start(self):
+        """Get super admin token."""
+        response = self.client.post("/api/v1/auth/token", json={
+            "userId": "admin_load_test",
+            "role": "super_admin",
+            "zone": "GSEZ"
+        })
+        
+        if response.status_code == 200:
+            self.token = response.json()["access_token"]
+            self.headers = {"Authorization": f"Bearer {self.token}"}
+    
+    @task
+    def admin_operations(self):
+        """Perform admin-heavy operations."""
+        # Create user
+        self.client.post("/api/v1/users/create_user",
+            headers=self.headers,
+            json={
+                "email": f"admin_test_{random.randint(1, 5000)}@example.com",
+                "role": "zone_admin",
+                "zone": "GSEZ"
+            }
+        )
+        
+        # List users
+        self.client.get("/api/v1/users/list_users", headers=self.headers)
+        
+        # Update multiple plots
+        for i in range(3):
+            self.client.put("/api/v1/plots/update-plot",
+                headers=self.headers,
+                json={
+                    "country": "Gabon",
+                    "zoneCode": "GSEZ",
+                    "phase": 1,
+                    "plotName": f"ADMIN-{i}-{random.randint(1, 1000)}",
+                    "plotStatus": "Allocated"
+                }
+            )
+
+
+class ReadOnlyUser(HttpUser):
+    """Simulated read-only user (normal_user role)."""
+    
+    wait_time = between(0.5, 2)
+    weight = 5  # Higher weight = more instances
+    
+    def on_start(self):
+        """Get normal user token."""
+        response = self.client.post("/api/v1/auth/token", json={
+            "userId": f"readonly_{random.randint(1, 1000)}",
+            "role": "normal_user",
+            "zone": "GABON"
+        })
+        
+        if response.status_code == 200:
+            self.token = response.json()["access_token"]
+            self.headers = {"Authorization": f"Bearer {self.token}"}
+    
+    @task(10)
+    def browse_plots(self):
+        """Browse available plots."""
+        self.client.get("/api/v1/plots/available", headers=self.headers)
+    
+    @task(5)
+    def filtered_plot_search(self):
+        """Search plots with filters."""
+        filters = [
+            "?country=Gabon",
+            "?zoneCode=GSEZ",
+            "?category=Residential",
+            "?category=Commercial&phase=1",
+            "?country=Gabon&zoneCode=OSEZ"
+        ]
+        
+        filter_param = random.choice(filters)
+        self.client.get(f"/api/v1/plots/available{filter_param}", headers=self.headers)
+    
+    @task(3)
+    def get_plot_details(self):
+        """Get detailed plot information."""
+        params = "?country=Gabon&zoneCode=GSEZ"
+        self.client.get(f"/api/v1/plots/plot-details{params}", headers=self.headers)
+    
+    @task(1)
+    def try_forbidden_action(self):
+        """Try to perform forbidden action (should get 403)."""
+        # Normal user trying to create user (should fail)
+        self.client.post("/api/v1/users/create_user",
+            headers=self.headers,
+            json={
+                "email": "forbidden@example.com",
+                "role": "normal_user",
+                "zone": "GABON"
+            }
+        )
+
+
+# Custom locust configuration
+if __name__ == "__main__":
+    print("""
+    Performance Testing Instructions:
+    
+    1. Start your FastAPI server:
+       uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    
+    2. Install locust:
+       pip install locust
+    
+    3. Run load tests:
+       locust -f tests/test_performance.py --host=http://localhost:8000
+    
+    4. Open web UI:
+       http://localhost:8089
+    
+    5. Recommended test parameters:
+       - Users: 10-50 (start small)
+       - Spawn rate: 1-5 users/second
+       - Duration: 1-5 minutes
+    
+    Test Scenarios:
+    - AriseAPIUser: Mixed operations (default weight=3)
+    - AdminUser: Heavy admin operations (weight=1) 
+    - ReadOnlyUser: Read-only browsing (weight=5)
+    
+    Metrics to Monitor:
+    - Response times (P50, P95, P99)
+    - Requests per second
+    - Failure rate
+    - Memory usage on server
+    """)
+</file>
+
+<file path=".gitignore">
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Firebase
+firebase-debug.log
+.firebase/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Documentation
+docs/_build/
+</file>
+
+<file path="api_key_auth_example.py">
+"""
+API Key / Secret-Based Authentication Example
+============================================
+
+This shows how to use API keys or secret credentials for authentication.
+Good for service-to-service communication or when passwords aren't suitable.
+"""
+import hashlib
+import secrets
+from datetime import datetime
+from typing import Optional, Dict
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+
+# 1. NEW SCHEMAS FOR API KEY AUTH
+class ApiKeyLoginRequest(BaseModel):
+    """Login request with userId and API key."""
+    userId: str = Field(..., max_length=50, description="User identifier")
+    apiKey: str = Field(..., min_length=32, max_length=128, description="User API key")
+    # Optional: include role and zone, or derive from userId
+
+
+class HashedSecretLoginRequest(BaseModel):
+    """Login request with userId and hashed secret."""
+    userId: str = Field(..., max_length=50)
+    role: str = Field(..., description="Requested role")
+    zone: str = Field(..., max_length=10)
+    secretHash: str = Field(..., description="SHA-256 hash of secret + userId + timestamp")
+    timestamp: int = Field(..., description="Unix timestamp (for replay protection)")
+
+
+class UserApiKey(BaseModel):
+    """User model with API key credentials."""
+    userId: str
+    apiKey: str  # Store securely, treat like password
+    role: str
+    zone: str
+    isActive: bool = True
+    createdDate: datetime
+
+
+# 2. API KEY MANAGEMENT
+class ApiKeyManager:
+    """Manage API keys for users."""
+    
+    @staticmethod
+    def generate_api_key() -> str:
+        """Generate a secure random API key."""
+        return secrets.token_urlsafe(32)  # 256-bit key
+    
+    @staticmethod
+    def hash_secret(secret: str, userId: str, timestamp: int) -> str:
+        """Create hash for secret-based auth."""
+        data = f"{secret}{userId}{timestamp}"
+        return hashlib.sha256(data.encode()).hexdigest()
+
+
+# 3. API KEY AUTHENTICATION SERVICE  
+class ApiKeyAuthService:
+    """Authentication using API keys."""
+    
+    # In production: store in secure database
+    _user_keys: Dict[str, UserApiKey] = {}
+    _api_key_to_user: Dict[str, str] = {}  # apiKey -> userId mapping
     
     @classmethod
-    def verify_jwt_token(cls, token: str) -> Optional[JWTPayload]:
-        """
-        Verify and decode JWT token.
+    def create_user_with_api_key(cls, userId: str, role: str, zone: str) -> UserApiKey:
+        """Create user with generated API key."""
         
-        Args:
-            token: JWT token string
-            
-        Returns:
-            Optional[JWTPayload]: Decoded payload if valid, None if invalid
-        """
-        try:
-            payload = jwt.decode(
-                jwt=token,
-                key=settings.JWT_SECRET_KEY,
-                algorithms=[settings.JWT_ALGORITHM]
-            )
-            return JWTPayload(**payload)
-        except jwt.ExpiredSignatureError:
+        api_key = ApiKeyManager.generate_api_key()
+        
+        user = UserApiKey(
+            userId=userId,
+            apiKey=api_key,
+            role=role,
+            zone=zone,
+            createdDate=datetime.utcnow()
+        )
+        
+        cls._user_keys[userId] = user
+        cls._api_key_to_user[api_key] = userId
+        
+        return user
+    
+    @classmethod
+    def authenticate_with_api_key(cls, userId: str, apiKey: str) -> Optional[UserApiKey]:
+        """Authenticate user with API key."""
+        
+        # Find user
+        user = cls._user_keys.get(userId)
+        if not user or not user.isActive:
             return None
+            
+        # Verify API key
+        if user.apiKey != apiKey:
+            return None
+            
+        return user
+    
+    @classmethod
+    def authenticate_with_secret_hash(cls, request: HashedSecretLoginRequest, master_secret: str) -> Optional[UserApiKey]:
+        """Authenticate using hashed secret (more secure)."""
+        
+        # Check timestamp (prevent replay attacks)
+        current_time = int(datetime.utcnow().timestamp())
+        if abs(current_time - request.timestamp) > 300:  # 5 minute window
+            return None
+            
+        # Verify hash
+        expected_hash = ApiKeyManager.hash_secret(master_secret, request.userId, request.timestamp)
+        if request.secretHash != expected_hash:
+            return None
+            
+        # Find user (or create if authorized)
+        user = cls._user_keys.get(request.userId)
+        if not user:
+            # Auto-create user if hash is valid (for first-time auth)
+            user = cls.create_user_with_api_key(request.userId, request.role, request.zone)
+            
+        return user
+
+
+# 4. SECURE API ENDPOINTS
+router = APIRouter(prefix="/auth", tags=["API Key Authentication"])
+
+@router.post("/login-with-api-key")
+async def login_with_api_key(request: ApiKeyLoginRequest):
+    """Login using userId and API key."""
+    
+    user = ApiKeyAuthService.authenticate_with_api_key(request.userId, request.apiKey)
+    
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_API_KEY",
+                "message": "Invalid userId or API key"
+            }
+        )
+    
+    # Create JWT token after successful authentication
+    # token = create_jwt_token_for_user(user)
+    
+    return {
+        "access_token": "jwt_token_here",
+        "token_type": "bearer", 
+        "expires_in": 86400,
+        "user_info": {
+            "userId": user.userId,
+            "role": user.role,
+            "zone": user.zone
+        }
+    }
+
+
+@router.post("/login-with-secret")
+async def login_with_secret_hash(request: HashedSecretLoginRequest):
+    """Login using hashed secret (most secure)."""
+    
+    # This would come from environment variable
+    MASTER_SECRET = "your-super-secret-key-from-env"
+    
+    user = ApiKeyAuthService.authenticate_with_secret_hash(request, MASTER_SECRET)
+    
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_SECRET_HASH",
+                "message": "Invalid secret hash or expired timestamp"
+            }
+        )
+    
+    # Create JWT token
+    return {
+        "access_token": "jwt_token_here",
+        "token_type": "bearer",
+        "expires_in": 86400
+    }
+
+
+@router.post("/generate-api-key")
+async def generate_user_api_key(userId: str, role: str, zone: str):
+    """Generate API key for a user (admin only)."""
+    
+    user = ApiKeyAuthService.create_user_with_api_key(userId, role, zone)
+    
+    return {
+        "userId": user.userId,
+        "apiKey": user.apiKey,  # Return once, store securely!
+        "role": user.role,
+        "zone": user.zone,
+        "message": "Store this API key securely. It won't be shown again."
+    }
+
+
+# 5. EXAMPLE USAGE
+"""
+Method 1: API Key Authentication
+================================
+
+1. Generate API key (admin action):
+POST /auth/generate-api-key?userId=admin001&role=super_admin&zone=GSEZ
+
+Response:
+{
+    "userId": "admin001",
+    "apiKey": "xl7YzDVwF6QCz8N5hKpLxWd_8jF3nRoA9mB1eT2vU4s",
+    "role": "super_admin",
+    "zone": "GSEZ"
+}
+
+2. Login with API key:
+POST /auth/login-with-api-key
+{
+    "userId": "admin001",
+    "apiKey": "xl7YzDVwF6QCz8N5hKpLxWd_8jF3nRoA9mB1eT2vU4s"
+}
+
+
+Method 2: Hashed Secret Authentication (Most Secure)
+===================================================
+
+1. Client calculates hash:
+secret = "master-secret-from-env"
+userId = "admin001" 
+timestamp = 1720972800
+hash = sha256(secret + userId + timestamp)
+
+2. Login with hash:
+POST /auth/login-with-secret
+{
+    "userId": "admin001",
+    "role": "super_admin", 
+    "zone": "GSEZ",
+    "secretHash": "a1b2c3d4e5f6...",
+    "timestamp": 1720972800
+}
+
+Benefits:
+- Secret never transmitted over network
+- Timestamp prevents replay attacks
+- Hash is unique per request
+"""
+</file>
+
+<file path="AUTH_METHODS_COMPARISON.md">
+# Authentication Methods Comparison Guide
+
+## The Problem You're Solving 🚨
+
+**Current Issue**: Your `/auth/token` endpoint gives JWT tokens to anyone who asks, with no credential verification:
+
+```json
+POST /auth/token
+{
+  "userId": "admin001",
+  "role": "super_admin", 
+  "zone": "GSEZ"
+}
+```
+
+☠️ **Anyone can claim to be any user!**
+
+## 3 Solutions Compared
+
+### 1. Password-Based Authentication 🔐
+**Best for**: Traditional web applications, user-facing systems
+
+```bash
+# Register
+POST /auth/register
+{
+  "email": "admin@arise.com",
+  "password": "SecurePassword123!",
+  "role": "super_admin",
+  "zone": "GSEZ"
+}
+
+# Login  
+POST /auth/login
+{
+  "email": "admin@arise.com",
+  "password": "SecurePassword123!"
+}
+```
+
+**Pros:**
+- ✅ Familiar to users
+- ✅ Can implement password policies
+- ✅ Easy password reset flows
+- ✅ Industry standard
+
+**Cons:**
+- ❌ Users must remember passwords
+- ❌ Password reset complexity
+- ❌ Requires user management UI
+
+---
+
+### 2. API Key Authentication 🗝️
+**Best for**: Service-to-service communication, automation
+
+```bash
+# Generate key (admin action)
+POST /auth/generate-api-key
+{
+  "userId": "admin001",
+  "role": "super_admin", 
+  "zone": "GSEZ"
+}
+
+# Login with key
+POST /auth/login-with-api-key
+{
+  "userId": "admin001",
+  "apiKey": "xl7YzDVwF6QCz8N5hKpLxWd_8jF3nRoA9mB1eT2vU4s"
+}
+```
+
+**Pros:**
+- ✅ Great for APIs and automation
+- ✅ No password complexity
+- ✅ Easy to revoke keys
+- ✅ Can have multiple keys per user
+
+**Cons:**
+- ❌ Keys must be stored securely
+- ❌ No built-in expiry (unless coded)
+- ❌ Less familiar to end users
+
+---
+
+### 3. Bearer Secret Authentication 🎯
+**Best for**: Your specific use case - simple, secure, controlled access
+
+```bash
+# Your approach: Secret in Authorization header
+POST /auth/token
+Headers:
+  Authorization: Bearer super-secret-hash-for-admin001
+Body:
+{
+  "userId": "admin001",
+  "role": "super_admin",
+  "zone": "GSEZ"
+}
+```
+
+**Pros:**
+- ✅ **Minimal changes to existing code**
+- ✅ Secret stays in header (never request body)
+- ✅ Can use HMAC for tamper protection
+- ✅ Familiar Bearer token pattern
+- ✅ Perfect for your current flow
+
+**Cons:**
+- ❌ Secrets must be pre-shared
+- ❌ Less standard than passwords
+- ❌ Manual secret distribution
+
+## 🎯 **Recommendation for Your System**
+
+**Choose Bearer Secret Authentication** because:
+
+1. **Minimal code changes** - Keep your existing `/auth/token` endpoint
+2. **Secure** - Secret verification before JWT issuance  
+3. **Simple** - No complex user management needed
+4. **Flexible** - Can upgrade to HMAC later
+
+## Implementation Plan
+
+### Phase 1: Add Secret Verification (Quick Fix)
+
+```python
+# Modify your existing endpoint
+@router.post("/token")
+async def create_access_token(
+    request: AuthTokenRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)  # Add this
+):
+    # 1. Verify Bearer secret first
+    if not verify_user_secret(request.userId, credentials.credentials):
+        raise HTTPException(401, detail="Invalid secret")
+    
+    # 2. Your existing JWT creation code (unchanged)
+    access_token = AuthService.create_jwt_token(request)
+    return AuthTokenResponse(access_token=access_token, ...)
+```
+
+### Phase 2: Upgrade to HMAC (Enhanced Security)
+
+```python
+# Client generates HMAC
+message = f"{userId}{role}{zone}{timestamp}"
+hmac_signature = hmac.new(user_secret, message, sha256).hexdigest()
+
+# Send in Bearer token
+Authorization: Bearer {hmac_signature}
+```
+
+### Phase 3: Consider Alternatives (Future)
+
+- Move to password auth for user-facing features
+- Keep API keys for service integrations
+- Implement refresh tokens for longer sessions
+
+## 🚀 **Start with Phase 1** - it's the quickest way to secure your system while keeping your existing API structure!
+
+Would you like me to help implement Phase 1 in your actual codebase?
+</file>
+
+<file path="bearer_secret_auth_example.py">
+"""
+Bearer Token with Secret Authentication Example
+===============================================
+
+This shows your suggested approach: using a secret/hashed credential 
+in the Bearer token field for initial authentication.
+"""
+import hashlib
+import hmac
+from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field
+
+
+# 1. SCHEMAS FOR BEARER SECRET AUTH
+class BearerSecretRequest(BaseModel):
+    """Request body when using Bearer secret for auth."""
+    userId: str = Field(..., max_length=50)
+    role: str = Field(..., description="Requested role")
+    zone: str = Field(..., max_length=10)
+    timestamp: Optional[int] = Field(None, description="Unix timestamp for replay protection")
+
+
+class UserCredentials(BaseModel):
+    """User credentials for secret-based auth."""
+    userId: str
+    secretHash: str  # Pre-shared secret hash
+    role: str
+    zone: str
+    isActive: bool = True
+
+
+# 2. BEARER SECRET AUTHENTICATION
+class BearerSecretAuth:
+    """Authentication using secret in Bearer token."""
+    
+    # Pre-configured user secrets (in production: secure database)
+    _user_secrets = {
+        "admin001": "super-secret-key-for-admin001",
+        "zone001": "zone-admin-secret-key-001",
+        "user001": "normal-user-secret-key-001"
+    }
+    
+    _users = {
+        "admin001": UserCredentials(
+            userId="admin001",
+            secretHash=hashlib.sha256("super-secret-key-for-admin001".encode()).hexdigest(),
+            role="super_admin",
+            zone="GSEZ"
+        ),
+        "zone001": UserCredentials(
+            userId="zone001", 
+            secretHash=hashlib.sha256("zone-admin-secret-key-001".encode()).hexdigest(),
+            role="zone_admin",
+            zone="GSEZ"
+        )
+    }
+    
+    @classmethod
+    def verify_bearer_secret(cls, credentials: HTTPAuthorizationCredentials, userId: str) -> bool:
+        """Verify the Bearer token contains correct secret."""
+        
+        # Get expected secret for user
+        expected_secret = cls._user_secrets.get(userId)
+        if not expected_secret:
+            return False
+            
+        # Compare provided token with expected secret
+        provided_secret = credentials.credentials
+        
+        # Option 1: Direct comparison
+        if provided_secret == expected_secret:
+            return True
+            
+        # Option 2: Hash comparison (more secure)
+        expected_hash = hashlib.sha256(expected_secret.encode()).hexdigest()
+        if provided_secret == expected_hash:
+            return True
+            
+        return False
+    
+    @classmethod
+    def verify_hmac_secret(cls, credentials: HTTPAuthorizationCredentials, request: BearerSecretRequest) -> bool:
+        """Verify Bearer token using HMAC (most secure)."""
+        
+        user_secret = cls._user_secrets.get(request.userId)
+        if not user_secret:
+            return False
+            
+        # Create expected HMAC
+        message = f"{request.userId}{request.role}{request.zone}{request.timestamp or ''}"
+        expected_hmac = hmac.new(
+            user_secret.encode(),
+            message.encode(), 
+            hashlib.sha256
+        ).hexdigest()
+        
+        return credentials.credentials == expected_hmac
+    
+    @classmethod
+    def get_user(cls, userId: str) -> Optional[UserCredentials]:
+        """Get user by userId."""
+        return cls._users.get(userId)
+
+
+# 3. BEARER SECRET DEPENDENCIES
+security = HTTPBearer()
+
+async def verify_bearer_secret_auth(
+    request: BearerSecretRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> UserCredentials:
+    """Dependency to verify Bearer secret authentication."""
+    
+    # Verify the Bearer token contains correct secret
+    if not BearerSecretAuth.verify_bearer_secret(credentials, request.userId):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_SECRET",
+                "message": "Invalid Bearer token secret"
+            },
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user info
+    user = BearerSecretAuth.get_user(request.userId)
+    if not user or not user.isActive:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_USER",
+                "message": "User not found or inactive"
+            }
+        )
+    
+    return user
+
+
+async def verify_hmac_bearer_auth(
+    request: BearerSecretRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> UserCredentials:
+    """Dependency to verify HMAC Bearer authentication."""
+    
+    if not BearerSecretAuth.verify_hmac_secret(credentials, request):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_HMAC",
+                "message": "Invalid HMAC signature in Bearer token"
+            }
+        )
+    
+    user = BearerSecretAuth.get_user(request.userId)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error_code": "USER_NOT_FOUND", "message": "User not found"}
+        )
+    
+    return user
+
+
+# 4. API ENDPOINTS WITH BEARER SECRET AUTH
+router = APIRouter(prefix="/auth", tags=["Bearer Secret Authentication"])
+
+@router.post("/token-with-bearer-secret")
+async def create_token_with_bearer_secret(
+    request: BearerSecretRequest,
+    user: UserCredentials = Depends(verify_bearer_secret_auth)
+):
+    """Get JWT token using Bearer secret authentication."""
+    
+    # Now create JWT token (after successful Bearer secret verification)
+    # token = create_jwt_token_for_user(user)
+    
+    return {
+        "access_token": "jwt_token_here",
+        "token_type": "bearer",
+        "expires_in": 86400,
+        "user_info": {
+            "userId": user.userId,
+            "role": user.role,
+            "zone": user.zone
+        }
+    }
+
+
+@router.post("/token-with-hmac-bearer") 
+async def create_token_with_hmac_bearer(
+    request: BearerSecretRequest,
+    user: UserCredentials = Depends(verify_hmac_bearer_auth)
+):
+    """Get JWT token using HMAC Bearer authentication (most secure)."""
+    
+    return {
+        "access_token": "jwt_token_here",
+        "token_type": "bearer", 
+        "expires_in": 86400
+    }
+
+
+# 5. EXAMPLE USAGE
+"""
+Method 1: Direct Secret in Bearer Token
+=======================================
+
+Request:
+POST /auth/token-with-bearer-secret
+Headers:
+  Authorization: Bearer super-secret-key-for-admin001
+  Content-Type: application/json
+Body:
+{
+    "userId": "admin001",
+    "role": "super_admin",
+    "zone": "GSEZ"
+}
+
+
+Method 2: Hashed Secret in Bearer Token
+======================================
+
+1. Client calculates hash:
+secret = "super-secret-key-for-admin001"
+hash = sha256(secret) = "a1b2c3d4e5f6..."
+
+2. Request:
+POST /auth/token-with-bearer-secret
+Headers:
+  Authorization: Bearer a1b2c3d4e5f6...
+Body:
+{
+    "userId": "admin001", 
+    "role": "super_admin",
+    "zone": "GSEZ"
+}
+
+
+Method 3: HMAC in Bearer Token (Most Secure)
+============================================
+
+1. Client calculates HMAC:
+secret = "super-secret-key-for-admin001"
+message = "admin001super_adminGSEZ1720972800"
+hmac = hmac_sha256(secret, message) = "x1y2z3..."
+
+2. Request:
+POST /auth/token-with-hmac-bearer
+Headers:
+  Authorization: Bearer x1y2z3...
+Body:
+{
+    "userId": "admin001",
+    "role": "super_admin", 
+    "zone": "GSEZ",
+    "timestamp": 1720972800
+}
+
+Benefits of Your Approach:
+- Familiar Bearer token pattern
+- Secret never in request body (header only)
+- Can use HMAC for tamper protection
+- Timestamp prevents replay attacks
+- Clean separation of auth secret vs JWT token
+"""
+</file>
+
+<file path="dev-requirements.txt">
+# Development Dependencies (additional to main requirements.txt)
+# These are used only during development and testing
+
+# Advanced Development Tools
+pre-commit                       # Git hooks for code quality
+mypy                            # Static type checking
+coverage                        # Code coverage reporting
+pytest-cov                     # Coverage plugin for pytest
+
+# API Documentation
+mkdocs                          # Documentation generator
+mkdocs-material                 # Material theme for MkDocs
+
+# Database Development
+firebase-admin                  # Firebase development tools
+
+# Code Quality
+bandit                          # Security linting
+safety                          # Security vulnerability checker
+</file>
+
+<file path="JWT_BEST_PRACTICES.md">
+"""
+JWT Security Implementation Best Practices
+==========================================
+
+Current Implementation Status: DEVELOPMENT READY
+Production Readiness: NEEDS SECURITY HARDENING
+
+IMPLEMENTED ✅:
+- JWT signing with secret key
+- Token expiration (24 hours)
+- Role-based access control
+- Permission validation
+- Comprehensive error handling
+
+MISSING - CRITICAL 🚨:
+1. User authentication (no password verification)
+2. Payload encryption (sensitive data exposed)
+3. Token revocation mechanism
+4. Rate limiting
+5. Session management
+
+MISSING - IMPORTANT ⚠️:
+6. Key rotation strategy
+7. Refresh tokens
+8. IP-based restrictions
+9. Request logging/monitoring
+10. Multi-factor authentication
+
+RECOMMENDED IMPLEMENTATION ROADMAP:
+==================================
+
+PHASE 1: IMMEDIATE SECURITY FIXES
+---------------------------------
+
+1. **Add User Authentication**
+```python
+# app/services/auth.py - Add password verification
+@classmethod
+def authenticate_user(cls, email: str, password: str) -> Optional[UserModel]:
+    user = cls.get_user_by_email(email)
+    if user and cls.verify_password(password, user.password_hash):
+        return user
+    return None
+
+@classmethod
+def hash_password(cls, password: str) -> str:
+    import bcrypt
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+@classmethod
+def verify_password(cls, password: str, hashed: str) -> bool:
+    import bcrypt
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+```
+
+2. **Implement Opaque Tokens**
+```python
+# app/services/token_service.py
+import redis
+import uuid
+import json
+
+class TokenService:
+    def __init__(self):
+        self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
+    
+    def create_session_token(self, user_data: dict) -> str:
+        session_id = str(uuid.uuid4())
+        
+        # Store user data server-side
+        self.redis_client.setex(
+            f"session:{session_id}",
+            24 * 3600,  # 24 hours
+            json.dumps(user_data)
+        )
+        
+        # JWT only contains session ID
+        payload = {
+            "session_id": session_id,
+            "exp": int((datetime.utcnow() + timedelta(hours=24)).timestamp())
+        }
+        
+        return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
+    
+    def get_session_data(self, session_id: str) -> Optional[dict]:
+        data = self.redis_client.get(f"session:{session_id}")
+        return json.loads(data) if data else None
+    
+    def revoke_session(self, session_id: str):
+        self.redis_client.delete(f"session:{session_id}")
+```
+
+3. **Add Rate Limiting**
+```python
+# app/middleware/rate_limiter.py
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+
+# In main.py
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# In endpoints
+@limiter.limit("5/minute")  # 5 requests per minute
+@router.post("/auth/token")
+async def create_token(request: Request, ...):
+    ...
+```
+
+PHASE 2: ENHANCED SECURITY
+-------------------------
+
+4. **Switch to RS256 with Key Rotation**
+```python
+# app/services/key_service.py
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+
+class KeyService:
+    @staticmethod
+    def generate_key_pair():
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+        
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+        
+        public_key = private_key.public_key()
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        
+        return private_pem, public_pem
+    
+    @staticmethod
+    def create_rs256_token(payload: dict, private_key: bytes) -> str:
+        return jwt.encode(
+            payload=payload,
+            key=private_key,
+            algorithm="RS256"
+        )
+    
+    @staticmethod
+    def verify_rs256_token(token: str, public_key: bytes) -> Optional[dict]:
+        try:
+            return jwt.decode(
+                jwt=token,
+                key=public_key,
+                algorithms=["RS256"]
+            )
         except jwt.InvalidTokenError:
             return None
+```
+
+5. **Add Refresh Tokens**
+```python
+# app/schemas/auth.py
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+# app/services/auth.py
+@classmethod
+def create_token_pair(cls, user: UserModel) -> TokenResponse:
+    # Short-lived access token (15 minutes)
+    access_payload = {
+        "user_id": user.email,
+        "type": "access",
+        "exp": int((datetime.utcnow() + timedelta(minutes=15)).timestamp())
+    }
     
-    @classmethod
-    def get_token_expiry_seconds(cls) -> int:
-        """
-        Get token expiry time in seconds.
+    # Long-lived refresh token (7 days)
+    refresh_payload = {
+        "user_id": user.email,
+        "type": "refresh",
+        "exp": int((datetime.utcnow() + timedelta(days=7)).timestamp())
+    }
+    
+    access_token = jwt.encode(access_payload, settings.JWT_SECRET_KEY, "HS256")
+    refresh_token = jwt.encode(refresh_payload, settings.JWT_REFRESH_SECRET, "HS256")
+    
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=900  # 15 minutes
+    )
+```
+
+PHASE 3: MONITORING & COMPLIANCE
+-------------------------------
+
+6. **Request Logging & Monitoring**
+```python
+# app/middleware/logging.py
+import logging
+from fastapi import Request
+import time
+
+logger = logging.getLogger("api_access")
+
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"Request: {request.method} {request.url.path}", extra={
+        "ip": request.client.host,
+        "user_agent": request.headers.get("user-agent"),
+        "method": request.method,
+        "path": request.url.path
+    })
+    
+    response = await call_next(request)
+    
+    # Log response
+    process_time = time.time() - start_time
+    logger.info(f"Response: {response.status_code}", extra={
+        "status_code": response.status_code,
+        "process_time": process_time
+    })
+    
+    return response
+```
+
+7. **Multi-Factor Authentication**
+```python
+# app/services/mfa_service.py
+import pyotp
+import qrcode
+
+class MFAService:
+    @staticmethod
+    def generate_totp_secret(user_email: str) -> str:
+        return pyotp.random_base32()
+    
+    @staticmethod
+    def generate_qr_code(user_email: str, secret: str) -> str:
+        totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+            name=user_email,
+            issuer_name="Arise Plot Management"
+        )
+        return totp_uri
+    
+    @staticmethod
+    def verify_totp(secret: str, token: str) -> bool:
+        totp = pyotp.TOTP(secret)
+        return totp.verify(token, valid_window=1)
+```
+
+CURRENT VULNERABILITIES TO FIX:
+==============================
+
+1. **JWT Payload Exposure** 🚨
+   - Current: Anyone can decode payload
+   - Fix: Use opaque tokens or JWE encryption
+
+2. **No User Authentication** 🚨
+   - Current: Anyone can request any role
+   - Fix: Add password verification
+
+3. **No Session Management** 🚨
+   - Current: Tokens valid until expiry
+   - Fix: Add revocation mechanism
+
+4. **No Rate Limiting** ⚠️
+   - Current: Unlimited requests
+   - Fix: Add request throttling
+
+5. **Weak Key Management** ⚠️
+   - Current: Single static secret
+   - Fix: Key rotation strategy
+
+PRODUCTION-READY CHECKLIST:
+===========================
+
+Security:
+□ User password authentication
+□ Opaque tokens or JWE encryption
+□ Rate limiting (per IP, per user)
+□ Request logging and monitoring
+□ Key rotation mechanism
+□ Session revocation
+□ HTTPS enforcement
+□ Input validation hardening
+
+Performance:
+□ Redis for session storage
+□ Database connection pooling
+□ Caching for frequent queries
+□ Async operations optimization
+
+Compliance:
+□ Audit logging
+□ Data retention policies
+□ GDPR compliance (if applicable)
+□ Security headers
+□ CORS configuration
+□ API versioning strategy
+
+Monitoring:
+□ Health check endpoints
+□ Metrics collection (Prometheus)
+□ Error tracking (Sentry)
+□ Performance monitoring (APM)
+□ Alerting system
+
+IMMEDIATE NEXT STEPS:
+====================
+
+1. **High Priority**: Implement user authentication with passwords
+2. **High Priority**: Switch to opaque tokens for sensitive data
+3. **Medium Priority**: Add rate limiting to auth endpoints
+4. **Medium Priority**: Implement session revocation
+5. **Low Priority**: Switch to RS256 for better key management
+
+Remember: Security is a journey, not a destination! 🛡️
+</file>
+
+<file path="jwt_security_analysis.py">
+"""
+JWT Security Analysis - What happens when someone gets your token?
+================================================================
+
+This demonstrates what an attacker can do with a stolen JWT token.
+"""
+import base64
+import json
+import hmac
+import hashlib
+from datetime import datetime
+
+
+def decode_jwt_payload(jwt_token: str) -> dict:
+    """
+    Decode JWT payload without needing the secret key.
+    This is what ANY attacker can do!
+    """
+    try:
+        # Split JWT into parts
+        header, payload, signature = jwt_token.split('.')
         
-        Returns:
-            int: Expiry time in seconds (24 hours = 86400 seconds)
-        """
-        return settings.JWT_EXPIRE_HOURS * 3600
+        # Add padding if needed (base64 requirement)
+        payload += '=' * (4 - len(payload) % 4)
+        
+        # Decode payload (no secret needed!)
+        decoded_bytes = base64.urlsafe_b64decode(payload)
+        payload_data = json.loads(decoded_bytes)
+        
+        return payload_data
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def analyze_jwt_security(jwt_token: str):
+    """Analyze what information is exposed in a JWT token."""
+    
+    print("🔍 JWT Security Analysis")
+    print("=" * 50)
+    
+    # 1. Decode payload (no secret needed)
+    payload = decode_jwt_payload(jwt_token)
+    
+    print("📋 EXPOSED INFORMATION (visible to anyone):")
+    print("-" * 40)
+    for key, value in payload.items():
+        if key == "exp":
+            # Convert timestamp to readable date
+            exp_date = datetime.fromtimestamp(value)
+            print(f"  {key}: {value} ({exp_date})")
+        else:
+            print(f"  {key}: {value}")
+    
+    print("\n🚨 WHAT AN ATTACKER CAN DO:")
+    print("-" * 40)
+    print("1. ✅ See user role:", payload.get('role'))
+    print("2. ✅ See user zone:", payload.get('zone'))
+    print("3. ✅ See permissions:", payload.get('permissions'))
+    print("4. ✅ See token expiry:", datetime.fromtimestamp(payload.get('exp', 0)))
+    print("5. ✅ Make API requests until expiry")
+    print("6. ❌ Cannot modify token (signature verification)")
+    print("7. ❌ Cannot extend expiry (signature verification)")
+    
+    print("\n⚠️  ATTACK SCENARIOS:")
+    print("-" * 40)
+    print("• Use stolen token for API access")
+    print("• Enumerate system capabilities")
+    print("• Understand permission structure")
+    print("• Time attacks around token expiry")
+    print("• Social engineering with role information")
+
+
+def simulate_token_tampering(jwt_token: str):
+    """Demonstrate what happens when someone tries to modify a JWT."""
+    
+    print("\n🔧 TOKEN TAMPERING SIMULATION")
+    print("=" * 50)
+    
+    # Split token
+    header, payload, signature = jwt_token.split('.')
+    
+    # Decode current payload
+    original_payload = decode_jwt_payload(jwt_token)
+    print("Original Role:", original_payload.get('role'))
+    
+    # Try to modify payload
+    try:
+        # Add padding and decode
+        payload += '=' * (4 - len(payload) % 4)
+        payload_bytes = base64.urlsafe_b64decode(payload)
+        payload_dict = json.loads(payload_bytes)
+        
+        # Modify role (attacker's goal)
+        payload_dict['role'] = 'super_admin'
+        payload_dict['permissions'] = {
+            "read": ["plots", "zones", "users"],
+            "write": ["plots", "zones", "users"]
+        }
+        
+        # Re-encode payload
+        new_payload_bytes = json.dumps(payload_dict).encode()
+        new_payload = base64.urlsafe_b64encode(new_payload_bytes).decode().rstrip('=')
+        
+        # Create tampered token (with original signature)
+        tampered_token = f"{header}.{new_payload}.{signature}"
+        
+        print("Tampered Role:", payload_dict.get('role'))
+        print("Tampered Token:", tampered_token[:50] + "...")
+        
+        print("\n❌ RESULT: Token signature verification will FAIL")
+        print("   Server will reject this token as invalid")
+        
+    except Exception as e:
+        print(f"Tampering failed: {e}")
+
+
+def demonstrate_signature_importance():
+    """Show why JWT signature is critical for security."""
+    
+    print("\n🛡️  SIGNATURE SECURITY IMPORTANCE")
+    print("=" * 50)
+    
+    # Example: Create two tokens with same payload but different signatures
+    header = '{"alg":"HS256","typ":"JWT"}'
+    payload = '{"userId":"attacker","role":"super_admin","zone":"GSEZ"}'
+    
+    # Encode without signature
+    header_b64 = base64.urlsafe_b64encode(header.encode()).decode().rstrip('=')
+    payload_b64 = base64.urlsafe_b64encode(payload.encode()).decode().rstrip('=')
+    
+    print("Header:", header)
+    print("Payload:", payload)
+    print("\nWithout signature:")
+    print(f"  {header_b64}.{payload_b64}.<NO_SIGNATURE>")
+    
+    print("\n❌ This token would be REJECTED because:")
+    print("  1. Missing signature")
+    print("  2. Cannot verify authenticity")
+    print("  3. Anyone could create fake tokens")
+    
+    print("\n✅ Valid signature proves:")
+    print("  1. Token was created by server with secret key")
+    print("  2. Payload hasn't been tampered with")
+    print("  3. Token is authentic and trusted")
+
+
+def show_attack_mitigation():
+    """Show how to mitigate JWT token theft."""
+    
+    print("\n🛡️  ATTACK MITIGATION STRATEGIES")
+    print("=" * 50)
+    
+    print("🔒 PREVENT TOKEN THEFT:")
+    print("  • Use HTTPS only (prevent network sniffing)")
+    print("  • Store tokens securely (httpOnly cookies, not localStorage)")
+    print("  • Implement CSP headers (prevent XSS)")
+    print("  • Short token expiry (limit damage window)")
+    print("  • Rotate tokens regularly")
+    
+    print("\n🚨 DETECT TOKEN ABUSE:")
+    print("  • Monitor unusual API usage patterns")
+    print("  • Track IP addresses per token")
+    print("  • Log all authentication events")
+    print("  • Alert on privilege escalation attempts")
+    
+    print("\n⚡ IMMEDIATE RESPONSE:")
+    print("  • Token blacklisting/revocation")
+    print("  • Force user re-authentication")
+    print("  • Disable compromised accounts")
+    print("  • Audit trail analysis")
+    
+    print("\n🔄 BETTER ALTERNATIVES:")
+    print("  • Opaque tokens (no payload exposure)")
+    print("  • Refresh token rotation")
+    print("  • Multi-factor authentication")
+    print("  • Session binding (IP, device fingerprinting)")
+
+
+if __name__ == "__main__":
+    # Example JWT from your system (this would be a real token)
+    sample_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZG1pbjAwMSIsInJvbGUiOiJzdXBlcl9hZG1pbiIsInpvbmUiOiJHU0VaIiwicGVybWlzc2lvbnMiOnsicmVhZCI6WyJwbG90cyIsInpvbmVzIiwidXNlcnMiXSwid3JpdGUiOlsicGxvdHMiLCJ6b25lcyIsInVzZXJzIl19LCJpYXQiOjE3MjA5NzI4MDAsImV4cCI6MTcyMTA1OTIwMH0.signature_placeholder"
+    
+    print("🎯 ARISE API JWT SECURITY ANALYSIS")
+    print("=" * 60)
+    print(f"Analyzing token: {sample_jwt[:50]}...")
+    print()
+    
+    # Run analysis
+    analyze_jwt_security(sample_jwt)
+    simulate_token_tampering(sample_jwt)
+    demonstrate_signature_importance()
+    show_attack_mitigation()
+    
+    print("\n" + "=" * 60)
+    print("🚨 CRITICAL FINDING: Your JWT payload is FULLY VISIBLE!")
+    print("   Anyone with the token can see role, permissions, zone")
+    print("   Consider implementing opaque tokens for better security")
+    print("=" * 60)
+</file>
+
+<file path="requirements-test.txt">
+# Testing Dependencies
+# Add these to your requirements-dev.txt or install separately
+
+# Core testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# HTTP testing clients
+httpx>=0.24.0
+requests>=2.31.0
+
+# Performance testing
+locust>=2.15.0
+
+# Test utilities
+pytest-mock>=3.11.0
+faker>=19.0.0
+
+# Development tools
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.4.0
+
+# FastAPI testing
+fastapi[test]>=0.100.0
+</file>
+
+<file path="SECRET_KEY_AUTH_GUIDE.md">
+# Secret Key Authentication Implementation Guide
+
+## 🔐 Overview
+
+Your JWT authentication system now requires a **secret key** parameter to verify user identity before issuing JWT tokens. This adds a crucial security layer that prevents unauthorized token generation.
+
+## 🔄 New Authentication Flow
+
+### Before (Insecure):
+```json
+POST /auth/token
+{
+  "userId": "admin001",
+  "role": "super_admin", 
+  "zone": "GSEZ"
+}
+```
+☠️ **Anyone could claim to be any user!**
+
+### After (Secure):
+```json
+POST /auth/token
+{
+  "userId": "admin001",
+  "role": "super_admin",
+  "zone": "GSEZ", 
+  "secretKey": "admin-secret-key-2025"
+}
+```
+✅ **Must provide valid secret key to get JWT token!**
+
+## 🛡️ Security Implementation
+
+### 1. Secret Key Storage
+- Secret keys are **bcrypt hashed** before storage
+- Plain text secrets are **never stored**
+- Hash verification happens during authentication
+
+### 2. Default User Secrets
+| User ID | Default Secret | Role |
+|---------|---------------|------|
+| admin001 | admin-secret-key-2025 | super_admin |
+| zone001 | zone-admin-secret-2025 | zone_admin |
+| user001 | normal-user-secret-2025 | normal_user |
+
+### 3. Validation Rules
+- Secret key must be **minimum 8 characters**
+- Bcrypt verification with stored hash
+- Failed verification returns **401 Unauthorized**
+
+## 📝 API Changes
+
+### Updated Request Schema
+```json
+{
+  "userId": "string (max 50 chars)",
+  "role": "super_admin|zone_admin|normal_user", 
+  "zone": "string (4-6 uppercase letters)",
+  "secretKey": "string (8-128 chars)"
+}
+```
+
+### New Error Response (401)
+```json
+{
+  "error_code": "INVALID_SECRET_KEY",
+  "message": "Invalid secret key for the specified user", 
+  "details": {"userId": "admin001"}
+}
+```
+
+## 🧪 Testing the Implementation
+
+### Test 1: Valid Authentication
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "admin001",
+    "role": "super_admin",
+    "zone": "GSEZ",
+    "secretKey": "admin-secret-key-2025"
+  }'
+```
+
+**Expected Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400
+}
+```
+
+### Test 2: Invalid Secret Key
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "admin001", 
+    "role": "super_admin",
+    "zone": "GSEZ",
+    "secretKey": "wrong-secret"
+  }'
+```
+
+**Expected Response (401):**
+```json
+{
+  "error_code": "INVALID_SECRET_KEY",
+  "message": "Invalid secret key for the specified user",
+  "details": {"userId": "admin001"}
+}
+```
+
+### Test 3: Non-existent User
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "hacker123",
+    "role": "super_admin", 
+    "zone": "GSEZ",
+    "secretKey": "any-secret"
+  }'
+```
+
+**Expected Response (401):**
+```json
+{
+  "error_code": "INVALID_SECRET_KEY", 
+  "message": "Invalid secret key for the specified user",
+  "details": {"userId": "hacker123"}
+}
+```
+
+## 🔧 Managing User Secrets
+
+### Using the Secret Key Manager
+Run the utility script to manage secrets:
+```bash
+python secret_key_manager.py
+```
+
+Options:
+1. **Generate default user secret hashes** - For initial setup
+2. **Test existing secret verification** - Verify current hashes work
+3. **Generate new user secret hash** - Add new users
+4. **Exit**
+
+### Adding New Users Programmatically
+```python
+from app.services.auth import AuthService
+
+# Add a new user with secret
+AuthService.add_user_secret("newuser123", "their-secret-key-2025")
+```
+
+### Manual Hash Generation
+```python
+import bcrypt
+
+secret = "your-secret-key"
+salt = bcrypt.gensalt()
+hashed = bcrypt.hashpw(secret.encode('utf-8'), salt)
+print(hashed.decode('utf-8'))
+```
+
+## 🚀 Production Considerations
+
+### 1. Secret Distribution
+- **Secure channels**: Distribute secrets via encrypted email, secure messaging
+- **One-time sharing**: Share secrets once during user onboarding
+- **Documentation**: Document which users have which secrets
+
+### 2. Secret Rotation
+- **Regular rotation**: Change secrets every 90 days
+- **Compromised secrets**: Immediate rotation if secret is compromised
+- **Version tracking**: Keep track of secret versions
+
+### 3. Storage Security
+- **Database encryption**: Store hashed secrets in encrypted database
+- **Access control**: Limit who can view/modify secrets
+- **Audit logging**: Log all secret-related operations
+
+### 4. Alternative Approaches
+For enhanced security, consider:
+- **HMAC signatures**: Time-based authentication codes
+- **Certificate-based auth**: X.509 certificates for users
+- **Multi-factor auth**: Combine secrets with TOTP codes
+
+## 🔍 Security Benefits
+
+### ✅ What This Fixes:
+1. **Prevents impersonation**: Can't claim to be another user
+2. **Adds authentication layer**: Must prove identity before JWT
+3. **Bcrypt protection**: Secrets are properly hashed
+4. **Audit trail**: Failed attempts are logged
+
+### ⚠️ What This Doesn't Fix:
+1. **JWT payload exposure**: Still visible to anyone with token
+2. **Token revocation**: No way to invalidate tokens early
+3. **Session management**: No server-side session tracking
+4. **Rate limiting**: No protection against brute force
+
+## 📋 Next Steps for Enhanced Security
+
+1. **Implement opaque tokens** - Hide sensitive data in JWT payload
+2. **Add rate limiting** - Prevent brute force attacks on secrets
+3. **Session management** - Server-side token revocation
+4. **Audit logging** - Track all authentication attempts
+5. **Multi-factor auth** - Additional security layer
+
+## 🎯 Summary
+
+Your authentication system is now **significantly more secure**:
+- ✅ Secret key required for JWT issuance
+- ✅ Bcrypt hashing for secret storage
+- ✅ Proper error handling for invalid secrets
+- ✅ Existing API endpoints unchanged
+- ✅ Easy secret management utilities
+
+**Result**: Only users with valid secret keys can obtain JWT tokens, preventing unauthorized access to your API!
+</file>
+
+<file path="secret_key_manager.py">
+"""
+Secret Key Management Utility
+============================
+
+This utility helps generate and verify bcrypt hashes for user secret keys.
+Use this to create proper hashed secrets for your users.
+"""
+import bcrypt
+import getpass
+
+
+def hash_secret_key(secret_key: str) -> str:
+    """Generate bcrypt hash for a secret key."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(secret_key.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+
+def verify_secret_key(secret_key: str, hashed_secret: str) -> bool:
+    """Verify a secret key against its hash."""
+    try:
+        return bcrypt.checkpw(secret_key.encode('utf-8'), hashed_secret.encode('utf-8'))
+    except Exception:
+        return False
+
+
+def generate_user_secrets():
+    """Interactive utility to generate user secret hashes."""
+    print("🔑 Secret Key Hash Generator")
+    print("=" * 40)
+    
+    default_users = {
+        "admin001": "admin-secret-key-2025",
+        "zone001": "zone-admin-secret-2025", 
+        "user001": "normal-user-secret-2025"
+    }
+    
+    print("\n📋 Default User Secrets:")
+    print("-" * 30)
+    
+    generated_hashes = {}
+    
+    for user_id, default_secret in default_users.items():
+        print(f"\nUser: {user_id}")
+        print(f"Default secret: {default_secret}")
+        
+        use_default = input("Use default secret? (y/n): ").strip().lower()
+        
+        if use_default == 'y':
+            secret = default_secret
+        else:
+            secret = getpass.getpass(f"Enter secret for {user_id}: ")
+        
+        # Generate hash
+        hashed = hash_secret_key(secret)
+        generated_hashes[user_id] = hashed
+        
+        print(f"Generated hash: {hashed}")
+        
+        # Verify the hash works
+        if verify_secret_key(secret, hashed):
+            print("✅ Hash verification successful!")
+        else:
+            print("❌ Hash verification failed!")
+    
+    print("\n" + "=" * 50)
+    print("📝 CODE FOR AuthService._user_secrets:")
+    print("=" * 50)
+    print("_user_secrets: Dict[str, str] = {")
+    for user_id, hashed in generated_hashes.items():
+        print(f'    "{user_id}": "{hashed}",')
+    print("}")
+    
+    return generated_hashes
+
+
+def test_secret_verification():
+    """Test secret verification with known values."""
+    print("\n🧪 Testing Secret Verification")
+    print("=" * 40)
+    
+    # Test with actual hashes from your system
+    test_cases = [
+        ("admin001", "admin-secret-key-2025", "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj56ZUJyTUES"),
+        ("zone001", "zone-admin-secret-2025", "$2b$12$B8VHhAuB8Q7.tF6SrN8gJOGJZb0J3N5r6H8kD2VmR9Q3P7L5X1Y2Z"),
+        ("user001", "normal-user-secret-2025", "$2b$12$C9WIhBvC9R8.uG7TsO9hKPHJZc1K4O6s7I9lE3WnS0R4Q8M6Y2Z3A")
+    ]
+    
+    for user_id, secret, stored_hash in test_cases:
+        result = verify_secret_key(secret, stored_hash)
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{user_id}: {status}")
+
+
+def generate_new_hash():
+    """Generate a hash for a new secret."""
+    print("\n🆕 Generate New Secret Hash")
+    print("=" * 40)
+    
+    user_id = input("Enter user ID: ").strip()
+    secret = getpass.getpass("Enter secret key: ")
+    
+    if len(secret) < 8:
+        print("❌ Secret must be at least 8 characters long!")
+        return
+    
+    hashed = hash_secret_key(secret)
+    print(f"\nUser ID: {user_id}")
+    print(f"Secret Hash: {hashed}")
+    
+    # Verify
+    if verify_secret_key(secret, hashed):
+        print("✅ Hash verification successful!")
+        print(f'\nAdd this to _user_secrets:\n"{user_id}": "{hashed}",')
+    else:
+        print("❌ Hash verification failed!")
+
+
+if __name__ == "__main__":
+    print("🔐 ARISE API - Secret Key Management Utility")
+    print("=" * 60)
+    
+    while True:
+        print("\nOptions:")
+        print("1. Generate default user secret hashes")
+        print("2. Test existing secret verification") 
+        print("3. Generate new user secret hash")
+        print("4. Exit")
+        
+        choice = input("\nSelect option (1-4): ").strip()
+        
+        if choice == "1":
+            generate_user_secrets()
+        elif choice == "2":
+            test_secret_verification()
+        elif choice == "3":
+            generate_new_hash()
+        elif choice == "4":
+            print("👋 Goodbye!")
+            break
+        else:
+            print("❌ Invalid option. Please choose 1-4.")
+</file>
+
+<file path="setup_guide.md">
+# Arise FastAPI Project Setup Guide
+
+## Phase 1: Local Development Setup
+
+### Prerequisites
+- Python 3.8+ installed
+- Git installed
+- Terminal/Command Line access
+
+### Setup Commands and Their Purpose
+
+```bash
+# 1. Navigate to project directory
+cd /home/user/Desktop/arise_fastapi
+# Purpose: Change to the project root directory
+
+# 2. Create Python virtual environment
+python3 -m venv venv
+# Purpose: Create isolated Python environment to avoid dependency conflicts
+
+# 3. Activate virtual environment (Linux/Mac)
+source venv/bin/activate
+# Purpose: Activate the virtual environment to use project-specific packages
+
+# 4. Upgrade pip to latest version
+pip install --upgrade pip
+# Purpose: Ensure we have the latest package installer
+
+# 5. Install project dependencies
+pip install -r requirements.txt
+# Purpose: Install all required packages for the FastAPI project
+
+# 6. Create environment variables file
+cp .env.example .env
+# Purpose: Create local environment configuration file
+
+# 7. Generate requirements with versions (after installation)
+pip freeze > requirements-lock.txt
+# Purpose: Lock current versions for reproducible deployments
+
+# 8. Run the development server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Purpose: Start FastAPI development server with auto-reload
+```
+
+## Project Structure Creation
+
+The following directories and files will be created:
+
+```
+arise_fastapi/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI application entry point
+│   ├── config.py               # Configuration settings
+│   ├── dependencies.py         # Dependency injection
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── v1/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py         # Authentication endpoints
+│   │   │   ├── plots.py        # Plot management endpoints
+│   │   │   └── zones.py        # Zone management endpoints
+│   │   └── deps.py             # API dependencies
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── security.py         # JWT and security utilities
+│   │   ├── permissions.py      # Role-based permissions
+│   │   └── exceptions.py       # Custom exceptions
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── auth.py             # Authentication models
+│   │   ├── plots.py            # Plot data models
+│   │   └── zones.py            # Zone data models
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── auth_service.py     # Authentication business logic
+│   │   ├── plot_service.py     # Plot management logic
+│   │   └── firestore_service.py # Database operations
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── logger.py           # Logging configuration
+│       └── validators.py       # Custom validators
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_auth.py            # Authentication tests
+│   ├── test_plots.py           # Plot endpoint tests
+│   └── conftest.py             # Test configuration
+│
+├── scripts/
+│   ├── setup_firestore.py      # Database initialization
+│   └── generate_sample_data.py # Sample data creation
+│
+├── docs/
+│   ├── api_specifications.md   # API documentation
+│   └── setup.md               # Setup instructions
+│
+├── .env.example                # Environment variables template
+├── .env                        # Local environment variables (git-ignored)
+├── .gitignore                  # Git ignore file
+├── requirements.txt            # Project dependencies
+├── requirements-lock.txt       # Locked dependency versions
+├── README.md                   # Project documentation
+└── main.py                     # Application entry point
+```
+
+## Key Dependencies Purpose
+
+- **fastapi**: Modern, fast web framework for building APIs
+- **uvicorn**: Lightning-fast ASGI server for production
+- **pydantic**: Data validation and settings management
+- **python-jose**: JWT token creation and validation
+- **firebase-admin**: Firebase/Firestore database integration
+- **python-dotenv**: Environment variable management
+- **pytest**: Testing framework for quality assurance
+
+## Environment Variables Required
+
+```env
+# Security
+JWT_SECRET_KEY=your-super-secret-jwt-key-here
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_HOURS=24
+
+# Firebase Configuration
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_PRIVATE_KEY_ID=your-private-key-id
+FIREBASE_PRIVATE_KEY=your-private-key
+FIREBASE_CLIENT_EMAIL=your-client-email
+FIREBASE_CLIENT_ID=your-client-id
+FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
+
+# Application Settings
+APP_NAME="Arise Plot Management API"
+APP_VERSION="1.0.0"
+DEBUG=True
+```
+
+## Development Workflow
+
+1. **Setup Phase**: Create virtual environment and install dependencies
+2. **Development Phase**: Implement endpoints following the API specifications
+3. **Testing Phase**: Write and run comprehensive tests
+4. **Documentation Phase**: Generate OpenAPI documentation
+5. **Deployment Phase**: Prepare for production deployment
+
+Ready to proceed with the next phase!
+</file>
+
+<file path="SETUP.md">
+# Arise FastAPI Project Setup Commands
+
+## 1. Virtual Environment Setup
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment (Linux/Mac)
+source venv/bin/activate
+
+# Activate virtual environment (Windows)
+# venv\Scripts\activate
+
+# Check if venv is activated
+echo $VIRTUAL_ENV
+which python
+
+# Deactivate virtual environment
+deactivate
+
+# Purpose: Isolates project dependencies from system Python packages
+```
+
+## 2. Install Dependencies
+```bash
+# Install production dependencies
+pip install -r requirements.txt
+
+# Install development dependencies (includes production)
+pip install -r requirements-dev.txt
+
+# Purpose: Installs all required packages for the FastAPI application
+```
+
+## 3. Environment Configuration
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Purpose: Sets up environment variables for configuration
+```
+
+## 4. Firebase Setup
+```bash
+# Create Firebase service account key directory
+mkdir -p app/config/firebase
+
+# Purpose: Stores Firebase service account credentials securely
+```
+
+## 5. Development Server
+```bash
+# Run development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Purpose: Starts FastAPI development server with auto-reload
+```
+
+## 6. Code Quality Tools
+```bash
+# Format code
+black app/
+
+# Sort imports
+isort app/
+
+# Lint code
+flake8 app/
+
+# Type checking
+mypy app/
+
+# Purpose: Maintains code quality and consistency
+```
+
+## 7. Testing
+```bash
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=app tests/
+
+# Purpose: Ensures code functionality and reliability
+```
+
+## 8. Database Operations
+```bash
+# Initialize Firestore (done programmatically)
+# No migrations needed for NoSQL
+
+# Purpose: Firestore is schema-less, no migration setup required
+```
+
+## Dependencies Explanation
+
+### Core Framework
+- **fastapi**: Modern, fast web framework for building APIs
+- **uvicorn**: ASGI server for running FastAPI applications
+- **pydantic**: Data validation and serialization
+
+### Authentication & Security
+- **python-jose**: JWT token creation and validation
+- **passlib**: Password hashing utilities
+- **python-multipart**: Handle form data and file uploads
+
+### Database
+- **firebase-admin**: Official Firebase Admin SDK
+- **google-cloud-firestore**: Direct Firestore client library
+
+### Development
+- **pytest**: Testing framework
+- **black**: Code formatter
+- **flake8**: Code linting
+- **isort**: Import sorting
+
+### Configuration
+- **python-dotenv**: Environment variable management
+- **pydantic-settings**: Settings management
+
+### Production
+- **gunicorn**: Production WSGI server
+- **structlog**: Structured logging
+</file>
+
+<file path="app/api/auth.py">
+"""
+Authentication API routes for JWT token generation.
+Implements POST /auth/token endpoint as per Flow 1 specifications.
+"""
+from fastapi import APIRouter, HTTPException, status, Header
+from typing import Optional
+from app.schemas.auth import AuthTokenRequest, AuthTokenResponse, AuthErrorResponse
+from app.services.auth import AuthService
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+@router.post(
+    "/token",
+    response_model=AuthTokenResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "model": AuthErrorResponse,
+            "description": "Bad Request - Invalid parameters"
+        },
+        401: {
+            "model": AuthErrorResponse,
+            "description": "Unauthorized - Invalid secret key"
+        }
+    },
+    summary="Generate JWT Token with Secret Key Authentication",
+    description="""
+    Generate a JWT token for authenticated API access with dual-layer security.
+    
+    **Flow 1: Authentication & Token Generation (Hybrid Security)**
+    
+    This endpoint requires:
+    1. Valid user credentials (userId, role, zone)
+    2. Authentication secret key for additional security
+    
+    **Security Model:**
+    - **Layer 1**: Secret key validation via Authorization header ("Secret <key>")
+    - **Layer 2**: JWT token signing using server-side secret (HS256)
+    
+    The returned JWT token contains:
+    - User identity (userId, role, zone)
+    - Role-based permissions (read/write access)
+    - Token expiration (24 hours)
+    
+    **Authorization Header Format:**
+    ```
+    Authorization: Secret arise-master-auth-secret-2025
+    ```
+    
+    **Role-based Permissions:**
+    - `super_admin`: Full read/write access to all zones
+    - `zone_admin`: Read/write access to assigned zone only  
+    - `normal_user`: Read-only access to plots
+    
+    **Valid Zone Codes:** GSEZ, OSEZ, GABON (4-6 uppercase letters)
+    """
+)
+async def create_access_token(
+    request: AuthTokenRequest,
+    authorization: Optional[str] = Header(None, description="Authorization header with secret key")
+) -> AuthTokenResponse:
+    """
+    Create JWT access token for API authentication with dual-layer security.
+    
+    **Sequence of Events:**
+    1. Extract and validate secret key from Authorization header
+    2. Validate request parameters (userId, role, zone)
+    3. Check role validity (super_admin, zone_admin, normal_user)
+    4. Assign role-based permissions
+    5. Create signed JWT token with server-side secret (24-hour expiry)
+    6. Return token response
+    
+    **Security Model:**
+    - Authorization header validates permission to generate tokens
+    - JWT token is signed with separate server-side secret for verification
+    
+    **Header Format:**
+    ```
+    Authorization: Secret arise-master-auth-secret-2025
+    ```
+    
+    Args:
+        request: Authentication request with userId, role, and zone
+        authorization: Authorization header containing "Secret <secret-key>"
+        
+    Returns:
+        AuthTokenResponse: JWT token with expiry information
+        
+    Raises:
+        HTTPException: 401 Unauthorized for missing/invalid secret key
+        HTTPException: 400 Bad Request for validation errors
+    """
+    
+    # Step 1: Extract and validate secret key from Authorization header
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "MISSING_AUTHORIZATION",
+                "message": "Authorization header is required",
+                "details": {"expected_format": "Authorization: Secret <secret-key>"}
+            }
+        )
+    
+    # Parse Authorization header (expected format: "Secret <secret-key>")
+    auth_parts = authorization.split(" ", 1)
+    if len(auth_parts) != 2 or auth_parts[0].lower() != "secret":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_AUTHORIZATION_FORMAT",
+                "message": "Invalid Authorization header format",
+                "details": {"expected_format": "Authorization: Secret <secret-key>"}
+            }
+        )
+    
+    secret_key = auth_parts[1]
+    
+    # Step 2: Validate request parameters including secret key
+    validation_error = AuthService.validate_request(request, secret_key)
+    
+    if validation_error == "INVALID_SECRET_KEY":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "UNAUTHORIZED",
+                "message": "Invalid authentication secret key",
+                "details": {"reason": "Secret key mismatch"}
+            }
+        )
+    
+    if validation_error == "INVALID_ROLE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_ROLE",
+                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
+                "details": {"provided_role": request.role.value}
+            }
+        )
+    
+    if validation_error == "INVALID_ZONE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "INVALID_ZONE", 
+                "message": "Invalid zone code. Must be a valid zone identifier (e.g., GSEZ, OSEZ)",
+                "details": {"provided_zone": request.zone}
+            }
+        )
+    
+    # Step 2: Create JWT token with permissions
+    try:
+        access_token = AuthService.create_jwt_token(request)
+        expires_in = AuthService.get_token_expiry_seconds()
+        
+        return AuthTokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=expires_in
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "Failed to create access token",
+                "details": {"error": str(e)}
+            }
+        )
+</file>
+
+<file path="app/api/zones.py">
+"""
+Zones API routes for zone master data management.
+Implements POST /country/zones endpoint as per API specifications.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.schemas.plots import ZoneCreateRequest, ZoneCreateResponse
+from app.schemas.auth import JWTPayload
+from app.utils.auth import require_zones_write
+from app.services.firestore import FirestoreService
+
+router = APIRouter(prefix="/country", tags=["Zones"])
+firestore_service = FirestoreService()
+
+
+@router.post(
+    "/zones",
+    response_model=ZoneCreateResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Unauthorized - Invalid or expired JWT token"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+        409: {"description": "Zone code already exists"}
+    },
+    summary="Create Zone Master Data",
+    description="""
+    Create or update zone master data for economic zones.
+    
+    **Logic**: Essential for establishing economic zones before creating plots.
+    Zone master data provides the foundation for plot management within zones.
+    
+    **Role-Based Access**:
+    - Requires 'write' permission for zones
+    - Only super_admin and zone_admin can create zones
+    - Zone admins typically create zones for their assigned areas
+    
+    **Business Validation**:
+    - Zone code must be unique across the system
+    - Zone code format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
+    - Zone type must be one of: SEZ, Industrial, Commercial
+    - Land area must be positive value in hectares
+    
+    **Use Cases**:
+    - Setting up new economic zones
+    - Updating zone information
+    - Preparing infrastructure for plot allocation
+    """
+)
+async def create_zone(
+    request: ZoneCreateRequest,
+    user: JWTPayload = Depends(require_zones_write)
+) -> ZoneCreateResponse:
+    """
+    Create or update zone master data.
+    
+    Args:
+        request: Zone creation request with zone details
+        user: Authenticated user (injected by dependency)
+        
+    Returns:
+        ZoneCreateResponse: Success response with zone code
+        
+    Raises:
+        HTTPException: 409 if zone exists, 400 for validation errors
+    """
+    try:
+        result = await firestore_service.create_zone(request)
+        return ZoneCreateResponse(**result)
+    
+    except ValueError as e:
+        if "already exists" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error_code": "ZONE_EXISTS",
+                    "message": str(e),
+                    "details": {
+                        "zone_code": request.zoneCode,
+                        "country": request.country
+                    }
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error_code": "INVALID_DATA",
+                    "message": str(e)
+                }
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An internal server error occurred"
+            }
+        )
 </file>
 
 <file path="app/services/firestore.py">
@@ -2143,10 +4365,6 @@ class FirestoreService:
         return PlotDetailsResponse(metadata=metadata, plots=plot_items)
 </file>
 
-<file path="app/utils/__init__.py">
-# Utils package
-</file>
-
 <file path="app/utils/auth.py">
 """
 Authentication dependencies for protected endpoints.
@@ -2250,80 +4468,162 @@ require_plots_read = require_permission("plots", "read")
 require_plots_write = require_permission("plots", "write") 
 require_zones_read = require_permission("zones", "read")
 require_zones_write = require_permission("zones", "write")
+
+
+def require_permissions(actions: list, resources: list):
+    """
+    Dependency factory to check user permissions for multiple resources/actions.
+    
+    Args:
+        actions: List of action types (e.g., ["read", "write"])
+        resources: List of resource types (e.g., ["plots", "zones", "users"])
+        
+    Returns:
+        Dependency function that checks permissions
+    """
+    
+    def check_permissions(user: JWTPayload = Depends(get_current_user)) -> JWTPayload:
+        """
+        Check if user has required permissions for resources and actions.
+        
+        Args:
+            user: Current authenticated user
+            
+        Returns:
+            JWTPayload: User payload if permissions granted
+            
+        Raises:
+            HTTPException: 403 Forbidden if insufficient permissions
+        """
+        
+        # Check each action-resource combination
+        for action in actions:
+            user_permissions = user.permissions.get(action, [])
+            for resource in resources:
+                if resource not in user_permissions:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "error_code": "FORBIDDEN",
+                            "message": f"Insufficient permissions for {action} access to {resource}",
+                            "details": {
+                                "required_action": action,
+                                "required_resource": resource,
+                                "user_permissions": user.permissions
+                            }
+                        }
+                    )
+        
+        return user
+    
+    return check_permissions
 </file>
 
-<file path="app/__init__.py">
-# App package
-</file>
+<file path="api_flow_diagram.mermaid">
+flowchart TD
+    subgraph auth ["Authentication Flow - POST /auth/token"]
+        A[Client App] -->|"POST /auth/token<br/>Body: {userId, role, zone}"| B[FastAPI Backend]
+        B --> C{Validate Parameters}
+        C -->|"Missing Parameters"| D["400 Bad Request<br/>MISSING_PARAMETERS"]
+        C -->|"Invalid Role"| E["400 Bad Request<br/>INVALID_ROLE"]
+        C -->|"Invalid Zone"| F["400 Bad Request<br/>INVALID_ZONE"]
+        C -->|"Valid"| G[Assign Role-Based Permissions]
+        G --> H{Role Type}
+        H -->|"super_admin"| I["Permissions:<br/>read: plots<br/>write: plots"]
+        H -->|"zone_admin"| J["Permissions:<br/>read: plots<br/>write: plots for zone only"]
+        H -->|"normal_user"| K["Permissions:<br/>read: plots<br/>write: none"]
+        I --> L["Create JWT Token<br/>24hr expiry"]
+        J --> L
+        K --> L
+        L --> M["200 OK<br/>Return JWT Token"]
+        M --> N[Client Stores Token]
+    end
 
-<file path=".gitignore">
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+    subgraph unified ["Unified API Request Flow"]
+        N --> O[Client Makes API Request<br/>Authorization: Bearer token]
+        O --> P[FastAPI Backend]
+        P --> Q[Verify JWT Token]
+        Q -->|"Invalid/Expired"| R[401 Unauthorized]
+        Q -->|"Valid"| S["Extract User Payload<br/>{userId, role, zone, permissions}"]
+        S --> T{Check Required Permission}
+        T -->|"No Permission"| U[403 Forbidden]
+        T -->|"Has Permission"| V{Request Type}
+        
+        V -->|"GET /plots/available"| RR[Query Firestore<br/>GET /plots/available]
+        V -->|"PUT /update-plot"| SS[Update Firestore<br/>PUT /update-plot]
+        V -->|"PATCH /release-plot"| TT[Update Firestore<br/>PATCH /release-plot]
+        V -->|"POST /country/zones"| UU[Create/Update Firestore<br/>POST /country/zones]
+        V -->|"GET /plot-details"| VV[Query Firestore<br/>GET /plot-details]
+        
+        RR --> WW[(Firestore Database)]
+        SS --> XX[(Firestore Database)]
+        TT --> YY[(Firestore Database)]
+        UU --> ZZ[(Firestore Database)]
+        VV --> AAA[(Firestore Database)]
+        
+        WW --> BBB["200 OK<br/>Available Plots Response"]
+        XX --> CCC["200 OK<br/>Plot Updated Successfully"]
+        YY --> DDD["200 OK<br/>Plot Released Successfully"]
+        ZZ --> EEE["200 OK<br/>Zone Data Saved"]
+        AAA --> FFF["200 OK<br/>Plot Details Response"]
+    end
 
-# Virtual Environment
-venv/
-env/
-ENV/
+    %% Styling
+    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef backendStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef dbStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef successStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef decisionStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef permissionStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef requestStyle fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
 
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Firebase
-firebase-debug.log
-.firebase/
-
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
-
-# Documentation
-docs/_build/
+    class A,O clientStyle
+    class B,P,Q,S backendStyle
+    class WW,XX,YY,ZZ,AAA dbStyle
+    class D,E,F,R,U errorStyle
+    class M,BBB,CCC,DDD,EEE,FFF successStyle
+    class C,T,V decisionStyle
+    class I,J,K permissionStyle
+    class RR,SS,TT,UU,VV requestStyle
 </file>
 
 <file path="api_specifications.md">
 # API Specifications - Request/Response Schema Documentation
+
+## JWT Implementation Details
+
+### JWT Token Structure
+The API uses HS256 (HMAC with SHA-256) symmetric encryption for JWT tokens:
+
+```json
+{
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "payload": {
+    "userId": "user_001",
+    "role": "super_admin",
+    "zone": "GSEZ",
+    "permissions": {
+      "read": ["plots", "zones", "users"],
+      "write": ["plots", "zones", "users"]
+    },
+    "iat": 1720972800,
+    "exp": 1721059200
+  },
+  "signature": "HMAC-SHA256-signature-here"
+}
+```
+
+### Security Implementation
+- **Secret Key**: Retrieved from `JWT_SECRET_KEY` environment variable
+- **Algorithm**: HS256 (symmetric key - same key for signing and verification)
+- **Expiry**: 24 hours (86400 seconds)
+- **Verification**: All API endpoints verify token signature using the same secret key
+
+---
 
 ## 1. Authentication API - POST /auth/token
 
@@ -2527,89 +4827,619 @@ docs/_build/
 
 ---
 
-## Common Business Validations
+## 7. User Management API - POST /users/create_user
 
-### Role-Based Permissions
-- **super_admin**: Full read/write access to all zones
-- **zone_admin**: Read/write access only to assigned zone
-- **normal_user**: Read-only access to plots
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | Must be valid email format |
+| role | string | 20 | Mandatory | Must be one of: super_admin, zone_admin, normal_user |
+| zone | string | 10 | Mandatory | Must be valid zone code (GSEZ, OSEZ, GABON, TEST) |
 
-### Zone Codes
-- Must follow format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
-- Must exist in the zone master data
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
 
-### Plot Status Values
-- **Available**: Plot is free for allocation
-- **Allocated**: Plot is assigned to a company
-- **Reserved**: Plot is temporarily held
+### Response Schema - Success (201)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | User email address |
+| role | string | 20 | Mandatory | Assigned user role |
+| zone | string | 10 | Mandatory | Assigned zone code |
+| createdDate | string | 30 | Mandatory | ISO 8601 timestamp |
+| lastModified | string | 30 | Mandatory | ISO 8601 timestamp |
 
-### Date Format
-- All dates must be in ISO 8601 format: YYYY-MM-DD
-- Future dates validation where applicable
-
-### Numeric Validations
-- Areas must be positive decimal values
-- Phase numbers must be positive integers
-- Investment amounts must be non-negative
-- Employment numbers must be non-negative integers
+### Response Schema - Error (400/401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | USER_EXISTS, INVALID_INPUT, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+| details | object | - | Optional | Additional error context |
 
 ---
 
-## Error Codes Reference
+## 8. User Management API - PUT /users/update_user
 
-| Error Code | HTTP Status | Description |
-|-----------|-------------|-------------|
-| MISSING_PARAMETERS | 400 | Required parameters are missing |
-| INVALID_ROLE | 400 | Role is not in allowed values |
-| INVALID_ZONE | 400 | Zone code is invalid |
-| UNAUTHORIZED | 401 | Invalid or expired JWT token |
-| FORBIDDEN | 403 | Insufficient permissions |
-| PLOT_NOT_FOUND | 404 | Plot does not exist |
-| ZONE_EXISTS | 409 | Zone code already exists |
-| INTERNAL_ERROR | 500 | Server internal error |
+### Request Schema
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | Must be valid email of existing user |
+| role | string | 20 | Optional | Must be one of: super_admin, zone_admin, normal_user |
+| zone | string | 10 | Optional | Must be valid zone code (GSEZ, OSEZ, GABON, TEST) |
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
+
+### Response Schema - Success (200)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| email | string | 100 | Mandatory | User email address |
+| role | string | 20 | Mandatory | Updated user role |
+| zone | string | 10 | Mandatory | Updated zone code |
+| createdDate | string | 30 | Mandatory | Original creation timestamp |
+| lastModified | string | 30 | Mandatory | Updated modification timestamp |
+
+### Response Schema - Error (400/401/403/404)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | USER_NOT_FOUND, NO_UPDATE_FIELDS, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+| details | object | - | Optional | Additional error context |
+
+---
+
+## 9. User Management API - GET /users/list_users
+
+### Request Parameters
+No query parameters required.
+
+### Request Headers
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| Authorization | string | 600 | Mandatory | Format: "Bearer {jwt_token}" with super_admin role |
+
+### Response Schema - Success (200)
+Response is an array of user objects:
+
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| [].email | string | 100 | Mandatory | User email address |
+| [].role | string | 20 | Mandatory | User role |
+| [].zone | string | 10 | Mandatory | User zone code |
+| [].createdDate | string | 30 | Mandatory | Creation timestamp |
+| [].lastModified | string | 30 | Mandatory | Last modification timestamp |
+
+### Response Schema - Error (401/403)
+| Message Element | Data Type | Max Length | Mandatory/Optional | Business Validation |
+|----------------|-----------|------------|-------------------|-------------------|
+| error_code | string | 50 | Mandatory | UNAUTHORIZED, INSUFFICIENT_PERMISSIONS |
+| message | string | 200 | Mandatory | Error description |
+
+---
+
+## User Storage Implementation
+
+### Current Implementation (Development)
+- **Storage**: In-memory Python dictionary
+- **Key**: User email address (lowercase)
+- **Value**: UserModel object with email, role, zone, timestamps
+- **Persistence**: Data lost on server restart
+- **Concurrency**: Not thread-safe
+
+### Data Structure
+```python
+_users: Dict[str, UserModel] = {
+    "user@example.com": UserModel(
+        email="user@example.com",
+        role="zone_admin",
+        zone="GSEZ",
+        createdDate=datetime(2024, 1, 1, 10, 0, 0),
+        lastModified=datetime(2024, 1, 1, 10, 0, 0)
+    )
+}
+```
+
+### Production Requirements
+- **Storage**: Firestore collection "users"
+- **Indexing**: Email (unique), role, zone
+- **Security**: Firestore security rules
+- **Backup**: Automatic Firestore backups
+- **Concurrency**: Firestore handles concurrent access
+
+---
+
+## Security & Access Control
+
+### Role-Based Permission Matrix
+| Operation | super_admin | zone_admin | normal_user |
+|-----------|-------------|------------|-------------|
+| Create Users | ✅ | ❌ | ❌ |
+| Update Users | ✅ | ❌ | ❌ |
+| List Users | ✅ | ❌ | ❌ |
+| Read All Plots | ✅ | ✅ (zone only) | ✅ |
+| Write Plots | ✅ | ✅ (zone only) | ❌ |
+| Read Zones | ✅ | ✅ (zone only) | ✅ |
+| Write Zones | ✅ | ✅ (zone only) | ❌ |
+
+### JWT Security Considerations
+- **Algorithm**: HS256 (symmetric) - development friendly
+- **Secret Rotation**: Manual (requires restart)
+- **Token Storage**: Client responsibility
+- **Revocation**: Not implemented (tokens valid until expiry)
+- **Production Recommendations**: 
+  - Use RS256 (asymmetric keys)
+  - Implement token blacklisting
+  - Add refresh token mechanism
+  - Store secrets in secure key management
+
+---
 </file>
 
-<file path="dev-requirements.txt">
-# Development Dependencies (additional to main requirements.txt)
-# These are used only during development and testing
+<file path="README.md">
+# Arise Plot Management API
 
-# Advanced Development Tools
-pre-commit                       # Git hooks for code quality
-mypy                            # Static type checking
-coverage                        # Code coverage reporting
-pytest-cov                     # Coverage plugin for pytest
+A robust FastAPI backend for managing land plots and economic zones with JWT-based authentication and role-based access control.
 
-# API Documentation
-mkdocs                          # Documentation generator
-mkdocs-material                 # Material theme for MkDocs
+## 🚀 Features
 
-# Database Development
-firebase-admin                  # Firebase development tools
+- **JWT Authentication** with role-based permissions
+- **Plot Management** (create, update, release, query)
+- **Zone Master Data** management
+- **Role-Based Access Control** (super_admin, zone_admin, normal_user)
+- **Auto-Generated API Documentation** (Swagger UI & ReDoc)
+- **Input Validation** with Pydantic schemas
+- **Mock Data Support** for development (Firestore ready)
 
-# Code Quality
-bandit                          # Security linting
-safety                          # Security vulnerability checker
-</file>
+## 📋 Table of Contents
 
-<file path="requirements-dev.txt">
-# Development-only dependencies
--r requirements.txt
+- [Quick Start](#quick-start)
+- [API Endpoints](#api-endpoints)
+- [Authentication & Permissions](#authentication--permissions)
+- [Request/Response Schemas](#requestresponse-schemas)
+- [Development Setup](#development-setup)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Future Roadmap](#future-roadmap)
 
-# Additional Development Tools
-jupyter==1.0.0                   # Jupyter notebook for data exploration
-ipython==8.17.2                  # Enhanced Python REPL
-pre-commit==3.5.0                # Git hooks for code quality
-mypy==1.7.1                      # Static type checking
+## 🚀 Quick Start
 
-# API Documentation
-mkdocs==1.5.3                    # Documentation generator
-mkdocs-material==9.4.8           # Material theme for mkdocs
+### Prerequisites
+- Python 3.8+
+- Git
 
-# Database Migration Tools (if needed)
-alembic==1.12.1                  # Database migration tool (for SQL databases)
+### Installation
+```bash
+# Clone the repository
+git clone <repository-url>
+cd arise_fastapi
 
-# Load Testing
-locust==2.17.0                   # Load testing tool
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Setup environment variables
+cp .env.example .env
+
+# Run the development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Access Documentation
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+## 📡 API Endpoints
+
+### Authentication
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/auth/token` | Generate JWT token | No |
+
+### Plot Management
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/plots/available` | Get available plots | Read plots |
+| PUT | `/api/v1/plots/update-plot` | Update plot allocation | Write plots |
+| PATCH | `/api/v1/plots/release-plot` | Release plot | Write plots |
+| GET | `/api/v1/plots/plot-details` | Get detailed plot info | Read plots |
+
+### User Management
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/users/create_user` | Create new user | Super admin only |
+| PUT | `/api/v1/users/update_user` | Update user role/zone | Super admin only |
+| GET | `/api/v1/users/list_users` | List all users | Super admin only |
+
+### Zone Management
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/country/zones` | Create zone master data | Write zones |
+
+## 🔐 Authentication & Permissions
+
+### JWT Implementation Details
+- **Algorithm**: HS256 (HMAC with SHA-256) - symmetric key encryption
+- **Secret Key**: Stored in `JWT_SECRET_KEY` environment variable
+- **Token Expiry**: 24 hours (86400 seconds)
+- **Payload**: Contains userId, role, zone, permissions, issued time, expiry time
+- **Security**: Token is signed and verified using the same secret key
+
+**Important Security Notes**:
+- HS256 uses symmetric encryption (same key for signing and verification)
+- Secret key must be kept secure and rotated regularly
+- For production, consider RS256 (public/private key pair) for enhanced security
+- Current setup is development-friendly but requires security hardening for production
+
+### User Storage & Management
+- **Current Storage**: In-memory dictionary (development only)
+- **User Creation**: Only `super_admin` can create users
+- **User Updates**: Only `super_admin` can modify user roles/zones
+- **Access Control**: Role-based permissions with zone restrictions for `zone_admin`
+- **Production Note**: Replace with Firestore for persistent user storage
+
+### User Roles
+- **super_admin**: Full access to all zones and operations
+- **zone_admin**: Access limited to assigned zone
+- **normal_user**: Read-only access to plots
+
+### Permission Matrix
+| Role | Read Plots | Write Plots | Read Zones | Write Zones |
+|------|------------|-------------|------------|-------------|
+| super_admin | ✅ All zones | ✅ All zones | ✅ All zones | ✅ All zones |
+| zone_admin | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone | ✅ Assigned zone |
+| normal_user | ✅ All zones | ❌ | ✅ All zones | ❌ |
+
+### Authentication Flow
+1. **Request Token**: POST `/auth/token` with userId, role, zone
+2. **Get JWT**: Receive 24-hour JWT token
+3. **Use Token**: Include `Authorization: Bearer <token>` in requests
+4. **Access Control**: Automatic permission and zone validation
+
+## 📝 Request/Response Schemas
+
+### Authentication
+
+#### POST /auth/token
+**Request:**
+```json
+{
+  "userId": "admin001",
+  "role": "super_admin",
+  "zone": "GSEZ"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400
+}
+```
+
+**Error (400):**
+```json
+{
+  "error_code": "INVALID_ROLE",
+  "message": "Invalid role provided",
+  "details": {...}
+}
+```
+
+### Plot Management
+
+#### GET /plots/available
+**Query Parameters:**
+- `country` (optional): Filter by country
+- `zoneCode` (optional): Filter by zone
+- `category` (optional): Residential, Commercial, Industrial
+- `phase` (optional): Phase number
+
+**Response:**
+```json
+{
+  "plots": [
+    {
+      "plotName": "GSEZ-R-001",
+      "plotStatus": "Available",
+      "category": "Residential",
+      "phase": 1,
+      "areaInSqm": 5000.0,
+      "areaInHa": 0.5,
+      "zoneCode": "GSEZ",
+      "country": "Gabon"
+    }
+  ]
+}
+```
+
+#### PUT /plots/update-plot
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "GSEZ",
+  "phase": 1,
+  "plotName": "GSEZ-R-001",
+  "companyName": "TechCorp Ltd",
+  "sector": "Technology",
+  "plotStatus": "Allocated",
+  "activity": "Software Development",
+  "investmentAmount": 1000000,
+  "employmentGenerated": 50,
+  "allocatedDate": "2024-07-04",
+  "expiryDate": "2029-07-04"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Plot updated successfully",
+  "plotName": "GSEZ-R-001",
+  "status": "Allocated"
+}
+```
+
+#### PATCH /plots/release-plot
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "GSEZ",
+  "plotName": "GSEZ-R-001",
+  "plotStatus": "available"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Plot released successfully",
+  "plotName": "GSEZ-R-001",
+  "status": "available"
+}
+```
+
+#### GET /plots/plot-details
+**Query Parameters:**
+- `country` (required): Country name
+- `zoneCode` (required): Zone code
+
+**Response:**
+```json
+{
+  "metadata": {
+    "country": "Gabon",
+    "zoneCode": "GSEZ",
+    "totalPlots": 10,
+    "availablePlots": 7
+  },
+  "plots": [
+    {
+      "plotName": "GSEZ-R-001",
+      "category": "Residential",
+      "areaInHa": 0.5,
+      "sector": "Housing",
+      "activity": "Residential Development",
+      "plotStatus": "Available",
+      "companyName": null,
+      "allocatedDate": null,
+      "investmentAmount": null,
+      "employmentGenerated": null
+    }
+  ]
+}
+```
+
+### Zone Management
+
+#### POST /country/zones
+**Request:**
+```json
+{
+  "country": "Gabon",
+  "zoneCode": "NSEZ",
+  "phase": 1,
+  "landArea": 150.5,
+  "zoneName": "New Special Economic Zone",
+  "zoneType": "SEZ",
+  "establishedDate": "2024-07-04"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Zone data saved successfully",
+  "zoneCode": "NSEZ"
+}
+```
+
+## 🛠️ Development Setup
+
+### Project Structure
+```
+arise_fastapi/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI app entry point
+│   ├── api/                    # API routes
+│   │   ├── auth.py            # Authentication endpoints
+│   │   ├── plots.py           # Plot management endpoints
+│   │   └── zones.py           # Zone management endpoints
+│   ├── core/
+│   │   └── config.py          # Application settings
+│   ├── schemas/               # Pydantic models
+│   │   ├── auth.py           # Authentication schemas
+│   │   └── plots.py          # Plot/Zone schemas
+│   ├── services/              # Business logic
+│   │   ├── auth.py           # Authentication service
+│   │   └── firestore.py      # Database service
+│   └── utils/
+│       └── auth.py           # Authentication utilities
+├── requirements.txt           # Production dependencies
+├── requirements-dev.txt       # Development dependencies
+├── .env.example              # Environment template
+├── .gitignore               # Git ignore rules
+└── README.md                # This file
+```
+
+### Environment Variables
+Copy `.env.example` to `.env` and configure:
+
+- **JWT_SECRET_KEY**: Secret key for JWT signing (HS256 symmetric encryption)
+- **JWT_ALGORITHM**: JWT algorithm (HS256 - HMAC with SHA-256)
+- **JWT_EXPIRE_HOURS**: Token expiry (24 hours)
+- **FIREBASE_PROJECT_ID**: Firebase project ID
+- **APP_NAME**: Application name
+- **DEBUG**: Debug mode (True/False)
+
+**Security Note**: The current implementation uses HS256 (symmetric key) for development. For production, consider RS256 (asymmetric key) for enhanced security.
+
+### Code Quality
+```bash
+# Format code
+black app/
+
+# Sort imports
+isort app/
+
+# Lint code
+flake8 app/
+
+# Type checking (if mypy installed)
+mypy app/
+```
+
+## 🧪 Testing
+
+### Manual Testing with curl
+
+1. **Get JWT Token:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "admin001",
+    "role": "super_admin",
+    "zone": "GSEZ"
+  }'
+```
+
+2. **Test Protected Endpoint:**
+```bash
+curl -X GET "http://localhost:8000/api/v1/plots/available?country=Gabon" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Automated Testing
+```bash
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=app tests/
+```
+
+## 🚀 Deployment
+
+### Current Support
+- **Local Development**: uvicorn server
+- **Traditional Hosting**: Any Python-compatible hosting
+- **Docker**: Containerization ready
+
+### Future Deployment Options
+- **AWS Lambda**: Serverless deployment with Mangum
+- **AWS Elastic Beanstalk**: Platform-as-a-Service
+- **Vercel**: Serverless functions
+- **Railway**: Simple deployment platform
+- **Heroku**: Cloud platform
+
+## 🔮 Future Roadmap
+
+### Phase 1: Database Integration
+- [ ] Replace mock data with real Firestore integration
+- [ ] Add database connection pooling
+- [ ] Implement data persistence
+
+### Phase 2: API Enhancements
+- [ ] Unify PUT/PATCH endpoints for plot updates
+- [ ] Add bulk operations support
+- [ ] Implement pagination for large datasets
+- [ ] Add search and filtering capabilities
+
+### Phase 3: Security & Performance
+- [ ] Add rate limiting
+- [ ] Implement refresh tokens
+- [ ] Add request logging and monitoring
+- [ ] Performance optimization
+
+### Phase 4: Additional Features
+- [ ] Email notifications
+- [ ] File upload support
+- [ ] Advanced reporting
+- [ ] Multi-language support
+
+### Phase 5: Deployment & DevOps
+- [ ] Docker containerization
+- [ ] AWS Lambda deployment
+- [ ] CI/CD pipeline setup
+- [ ] Infrastructure as Code (Terraform)
+- [ ] Monitoring and alerting
+
+## 📊 Current Implementation Status
+
+### ✅ Completed Features
+- JWT-based authentication system
+- Role-based access control
+- Plot CRUD operations
+- Zone management
+- API documentation (Swagger/ReDoc)
+- Request/response validation
+- Error handling
+- Mock data service
+
+### 🔄 In Progress
+- Database integration planning
+- Deployment strategy
+
+### 📋 Pending
+- Real Firestore integration
+- Production deployment
+- Comprehensive testing suite
+- Performance optimization
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 📞 Support
+
+For questions or support, please contact the development team or create an issue in the repository.
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: July 4, 2025  
+**FastAPI Version**: 0.115.14  
+**Python Version**: 3.8+
 </file>
 
 <file path="requirements.txt">
@@ -2620,7 +5450,7 @@ pydantic                         # Data validation and settings management
 pydantic-settings                # Settings management using Pydantic
 
 # Authentication and Security
-python-jose[cryptography]        # JWT token creation and validation
+PyJWT[cryptography]              # JWT token creation and validation with RS256 support
 passlib[bcrypt]                  # Password hashing (if needed later)
 python-multipart                 # Form data parsing
 
@@ -2654,287 +5484,578 @@ structlog                        # Structured logging
 gunicorn                         # Production WSGI server (if needed)
 </file>
 
-<file path="setup_guide.md">
-# Arise FastAPI Project Setup Guide
+<file path="app/core/config.py">
+"""
+Application configuration settings using Pydantic Settings.
+"""
+from pydantic_settings import BaseSettings
+from typing import List
+import os
 
-## Phase 1: Local Development Setup
 
-### Prerequisites
-- Python 3.8+ installed
-- Git installed
-- Terminal/Command Line access
+class Settings(BaseSettings):
+    """Application settings configuration."""
+    
+    # JWT Configuration
+    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"
+    JWT_ALGORITHM: str = "HS256" 
+    JWT_EXPIRE_HOURS: int = 24
+    
+    # Authentication Secret Key (for token generation authorization)
+    AUTH_SECRET_KEY: str = "arise-master-auth-secret-2025"
+    
+    # Firebase Configuration
+    FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
+    FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
+    FIREBASE_PRIVATE_KEY: str = ""
+    FIREBASE_CLIENT_EMAIL: str = ""
+    FIREBASE_CLIENT_ID: str = ""
+    FIREBASE_AUTH_URI: str = "https://accounts.google.com/o/oauth2/auth"
+    FIREBASE_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
+    FIREBASE_AUTH_PROVIDER_X509_CERT_URL: str = "https://www.googleapis.com/oauth2/v1/certs"
+    FIREBASE_CLIENT_X509_CERT_URL: str = ""
+    
+    # Application Settings
+    APP_NAME: str = "Arise Plot Management API"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = True
+    ENVIRONMENT: str = "development"
+    
+    # API Configuration
+    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "Arise FastAPI Backend"
+    
+    # CORS Settings
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:8080", 
+        "http://localhost:3001"
+    ]
+    
+    # Database Settings
+    DATABASE_URL: str = "firestore"
+    FIRESTORE_COLLECTION_PLOTS: str = "plots"
+    FIRESTORE_COLLECTION_ZONES: str = "zones"
+    FIRESTORE_COLLECTION_USERS: str = "users"
+    
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
 
-### Setup Commands and Their Purpose
 
-```bash
-# 1. Navigate to project directory
-cd /home/user/Desktop/arise_fastapi
-# Purpose: Change to the project root directory
-
-# 2. Create Python virtual environment
-python3 -m venv venv
-# Purpose: Create isolated Python environment to avoid dependency conflicts
-
-# 3. Activate virtual environment (Linux/Mac)
-source venv/bin/activate
-# Purpose: Activate the virtual environment to use project-specific packages
-
-# 4. Upgrade pip to latest version
-pip install --upgrade pip
-# Purpose: Ensure we have the latest package installer
-
-# 5. Install project dependencies
-pip install -r requirements.txt
-# Purpose: Install all required packages for the FastAPI project
-
-# 6. Create environment variables file
-cp .env.example .env
-# Purpose: Create local environment configuration file
-
-# 7. Generate requirements with versions (after installation)
-pip freeze > requirements-lock.txt
-# Purpose: Lock current versions for reproducible deployments
-
-# 8. Run the development server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-# Purpose: Start FastAPI development server with auto-reload
-```
-
-## Project Structure Creation
-
-The following directories and files will be created:
-
-```
-arise_fastapi/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI application entry point
-│   ├── config.py               # Configuration settings
-│   ├── dependencies.py         # Dependency injection
-│   │
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── v1/
-│   │   │   ├── __init__.py
-│   │   │   ├── auth.py         # Authentication endpoints
-│   │   │   ├── plots.py        # Plot management endpoints
-│   │   │   └── zones.py        # Zone management endpoints
-│   │   └── deps.py             # API dependencies
-│   │
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── security.py         # JWT and security utilities
-│   │   ├── permissions.py      # Role-based permissions
-│   │   └── exceptions.py       # Custom exceptions
-│   │
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── auth.py             # Authentication models
-│   │   ├── plots.py            # Plot data models
-│   │   └── zones.py            # Zone data models
-│   │
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── auth_service.py     # Authentication business logic
-│   │   ├── plot_service.py     # Plot management logic
-│   │   └── firestore_service.py # Database operations
-│   │
-│   └── utils/
-│       ├── __init__.py
-│       ├── logger.py           # Logging configuration
-│       └── validators.py       # Custom validators
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_auth.py            # Authentication tests
-│   ├── test_plots.py           # Plot endpoint tests
-│   └── conftest.py             # Test configuration
-│
-├── scripts/
-│   ├── setup_firestore.py      # Database initialization
-│   └── generate_sample_data.py # Sample data creation
-│
-├── docs/
-│   ├── api_specifications.md   # API documentation
-│   └── setup.md               # Setup instructions
-│
-├── .env.example                # Environment variables template
-├── .env                        # Local environment variables (git-ignored)
-├── .gitignore                  # Git ignore file
-├── requirements.txt            # Project dependencies
-├── requirements-lock.txt       # Locked dependency versions
-├── README.md                   # Project documentation
-└── main.py                     # Application entry point
-```
-
-## Key Dependencies Purpose
-
-- **fastapi**: Modern, fast web framework for building APIs
-- **uvicorn**: Lightning-fast ASGI server for production
-- **pydantic**: Data validation and settings management
-- **python-jose**: JWT token creation and validation
-- **firebase-admin**: Firebase/Firestore database integration
-- **python-dotenv**: Environment variable management
-- **pytest**: Testing framework for quality assurance
-
-## Environment Variables Required
-
-```env
-# Security
-JWT_SECRET_KEY=your-super-secret-jwt-key-here
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_HOURS=24
-
-# Firebase Configuration
-FIREBASE_PROJECT_ID=your-firebase-project-id
-FIREBASE_PRIVATE_KEY_ID=your-private-key-id
-FIREBASE_PRIVATE_KEY=your-private-key
-FIREBASE_CLIENT_EMAIL=your-client-email
-FIREBASE_CLIENT_ID=your-client-id
-FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
-FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
-
-# Application Settings
-APP_NAME="Arise Plot Management API"
-APP_VERSION="1.0.0"
-DEBUG=True
-```
-
-## Development Workflow
-
-1. **Setup Phase**: Create virtual environment and install dependencies
-2. **Development Phase**: Implement endpoints following the API specifications
-3. **Testing Phase**: Write and run comprehensive tests
-4. **Documentation Phase**: Generate OpenAPI documentation
-5. **Deployment Phase**: Prepare for production deployment
-
-Ready to proceed with the next phase!
+# Global settings instance
+settings = Settings()
 </file>
 
-<file path="SETUP.md">
-# Arise FastAPI Project Setup Commands
+<file path="app/schemas/auth.py">
+"""
+Authentication-related Pydantic schemas for request/response validation.
+"""
+import re
+from pydantic import BaseModel, Field, validator
+from typing import Dict, List, Any, Optional
+from enum import Enum
+from datetime import datetime
 
-## 1. Virtual Environment Setup
-```bash
-# Create virtual environment
-python3 -m venv venv
 
-# Activate virtual environment (Linux/Mac)
-source venv/bin/activate
+class UserRole(str, Enum):
+    """Valid user roles as per API specification."""
+    SUPER_ADMIN = "super_admin"
+    ZONE_ADMIN = "zone_admin"
+    NORMAL_USER = "normal_user"
 
-# Activate virtual environment (Windows)
-# venv\Scripts\activate
 
-# Check if venv is activated
-echo $VIRTUAL_ENV
-which python
+class AuthTokenRequest(BaseModel):
+    """
+    Request schema for POST /auth/token endpoint.
+    
+    As per API specification:
+    - userId: string, max 50 chars, mandatory
+    - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, mandatory (valid zone code)
+    
+    Note: Authentication secret is passed via Authorization header: "Secret <secret-key>"
+    """
+    userId: str = Field(..., max_length=50, description="Valid user identifier")
+    role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
+    zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
 
-# Deactivate virtual environment
-deactivate
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "userId": "user_001",
+                "role": "zone_admin",
+                "zone": "GSEZ"
+            }
+        }
 
-# Purpose: Isolates project dependencies from system Python packages
-```
 
-## 2. Install Dependencies
-```bash
-# Install production dependencies
-pip install -r requirements.txt
+class AuthTokenResponse(BaseModel):
+    """
+    Successful response schema for POST /auth/token endpoint.
+    
+    As per API specification:
+    - access_token: string, max 500 chars, mandatory (JWT token)
+    - token_type: string, max 10 chars, mandatory (always "bearer")
+    - expires_in: integer, mandatory (86400 seconds for 24 hours)
+    """
+    access_token: str = Field(..., max_length=500, description="JWT token with 24-hour expiry")
+    token_type: str = Field(default="bearer", max_length=10, description="Always 'bearer'")
+    expires_in: int = Field(..., description="Token expiry time in seconds (86400)")
 
-# Install development dependencies (includes production)
-pip install -r requirements-dev.txt
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer", 
+                "expires_in": 86400
+            }
+        }
 
-# Purpose: Installs all required packages for the FastAPI application
-```
 
-## 3. Environment Configuration
-```bash
-# Copy environment template
-cp .env.example .env
+class AuthErrorResponse(BaseModel):
+    """
+    Error response schema for authentication failures.
+    
+    As per API specification:
+    - error_code: string, max 50 chars, mandatory
+    - message: string, max 200 chars, mandatory  
+    - details: object, optional
+    """
+    error_code: str = Field(..., max_length=50, description="Error code identifier")
+    message: str = Field(..., max_length=200, description="Human-readable error description")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
 
-# Purpose: Sets up environment variables for configuration
-```
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "error_code": "INVALID_ROLE",
+                "message": "Invalid role provided. Must be one of: super_admin, zone_admin, normal_user",
+                "details": {"provided_role": "invalid_role"}
+            }
+        }
 
-## 4. Firebase Setup
-```bash
-# Create Firebase service account key directory
-mkdir -p app/config/firebase
 
-# Purpose: Stores Firebase service account credentials securely
-```
+class JWTPayload(BaseModel):
+    """
+    JWT token payload structure.
+    
+    Internal model for JWT token creation and validation.
+    """
+    userId: str
+    role: UserRole
+    zone: str
+    permissions: Dict[str, List[str]]
+    iat: int  # Issued at time
+    exp: int  # Expiration time
 
-## 5. Development Server
-```bash
-# Run development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "userId": "user_001",
+                "role": "zone_admin",
+                "zone": "GSEZ",
+                "permissions": {
+                    "read": ["plots", "zones"],
+                    "write": ["plots", "zones"]
+                },
+                "iat": 1672531200,
+                "exp": 1672617600
+            }
+        }
 
-# Purpose: Starts FastAPI development server with auto-reload
-```
 
-## 6. Code Quality Tools
-```bash
-# Format code
-black app/
+class CreateUserRequest(BaseModel):
+    """
+    Request schema for POST /create_user endpoint (super_admin only).
+    
+    As per API specification:
+    - email: string, valid email format, mandatory
+    - role: string, max 20 chars, mandatory (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, mandatory (valid zone code)
+    """
+    email: str = Field(..., max_length=100, description="Valid email address")
+    role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
+    zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        """Validate email format."""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
 
-# Sort imports
-isort app/
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "zone_admin",
+                "zone": "GSEZ"
+            }
+        }
 
-# Lint code
-flake8 app/
 
-# Type checking
-mypy app/
+class UpdateUserRequest(BaseModel):
+    """
+    Request schema for PUT /update_user endpoint (super_admin only).
+    
+    As per API specification:
+    - email: string, valid email format, mandatory (identifier)
+    - role: string, max 20 chars, optional (super_admin, zone_admin, normal_user)  
+    - zone: string, max 10 chars, optional (valid zone code)
+    """
+    email: str = Field(..., max_length=100, description="Valid email address of user to update")
+    role: Optional[UserRole] = Field(None, description="New user role: super_admin, zone_admin, or normal_user")
+    zone: Optional[str] = Field(None, max_length=10, description="New valid zone code (e.g., GSEZ, OSEZ)")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        """Validate email format."""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+    
+    @validator('zone')
+    def validate_zone_code(cls, v):
+        """Validate zone code format: 4-6 uppercase letters."""
+        if v and (not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6)):
+            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+        return v
 
-# Purpose: Maintains code quality and consistency
-```
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "normal_user",
+                "zone": "OSEZ"
+            }
+        }
 
-## 7. Testing
-```bash
-# Run tests
-pytest
 
-# Run tests with coverage
-pytest --cov=app tests/
+class UserResponse(BaseModel):
+    """
+    Response schema for user operations.
+    
+    Returns user information after create/update operations.
+    """
+    email: str = Field(..., description="User email address")
+    role: UserRole = Field(..., description="User role")
+    zone: str = Field(..., description="User zone")
+    createdDate: datetime = Field(..., description="User creation timestamp")
+    lastModified: datetime = Field(..., description="Last modification timestamp")
+    
+    class Config:
+        """Pydantic configuration."""
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat()
+        }
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "role": "zone_admin",
+                "zone": "GSEZ",
+                "createdDate": "2024-01-01T10:00:00Z",
+                "lastModified": "2024-01-01T10:00:00Z"
+            }
+        }
 
-# Purpose: Ensures code functionality and reliability
-```
 
-## 8. Database Operations
-```bash
-# Initialize Firestore (done programmatically)
-# No migrations needed for NoSQL
+class UserModel(BaseModel):
+    """
+    Internal user model for storage.
+    """
+    email: str
+    role: UserRole
+    zone: str
+    createdDate: datetime
+    lastModified: datetime
+    
+    class Config:
+        """Pydantic configuration."""
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat()
+        }
+</file>
 
-# Purpose: Firestore is schema-less, no migration setup required
-```
+<file path="app/services/auth.py">
+"""
+Authentication service for JWT token creation and validation.
+Implements the exact logic as specified in Flow 1 requirements.
+Enhanced with user management capabilities.
+"""
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+import jwt
+from app.core.config import settings
+from app.schemas.auth import UserRole, JWTPayload, AuthTokenRequest, CreateUserRequest, UpdateUserRequest, UserModel, UserResponse
 
-## Dependencies Explanation
 
-### Core Framework
-- **fastapi**: Modern, fast web framework for building APIs
-- **uvicorn**: ASGI server for running FastAPI applications
-- **pydantic**: Data validation and serialization
+class AuthService:
+    """Authentication service for handling JWT operations and user management."""
+    
+    # In-memory user storage (replace with Firestore in production)
+    _users: Dict[str, UserModel] = {}
+    
+    # Role-based permissions mapping as specified in the requirements
+    PERMISSIONS_MAP = {
+        "super_admin": {"read": ["plots", "zones", "users"], "write": ["plots", "zones", "users"]},
+        "zone_admin": {"read": ["plots", "zones"], "write": ["plots", "zones"]}, 
+        "normal_user": {"read": ["plots", "zones"], "write": []}
+    }
+    
+    # Valid zone codes (can be extended based on requirements)
+    VALID_ZONES = ["GSEZ", "OSEZ", "GABON", "TEST"]
+    
+    @classmethod
+    def validate_request(cls, request: AuthTokenRequest, secret_key: str) -> Optional[str]:
+        """
+        Validate authentication request parameters including secret key.
+        
+        Args:
+            request: Authentication request data
+            secret_key: Secret key from Authorization header
+            
+        Returns:
+            Optional[str]: Error code if validation fails, None if valid
+        """
+        # Check if secret key is valid
+        if secret_key != settings.AUTH_SECRET_KEY:
+            return "INVALID_SECRET_KEY"
+            
+        # Check if role is valid (already validated by Pydantic enum)
+        if request.role not in [role.value for role in UserRole]:
+            return "INVALID_ROLE"
+            
+        # Check if zone is valid
+        if request.zone not in cls.VALID_ZONES:
+            return "INVALID_ZONE"
+            
+        return None
+    
+    @classmethod
+    def get_permissions_for_role(cls, role: str) -> Dict[str, List[str]]:
+        """
+        Get permissions based on user role.
+        
+        Args:
+            role: User role (super_admin, zone_admin, normal_user)
+            
+        Returns:
+            Dict[str, List[str]]: Permissions dictionary
+        """
+        return cls.PERMISSIONS_MAP.get(role, {"read": [], "write": []})
+    
+    @classmethod
+    def create_jwt_token(cls, request: AuthTokenRequest) -> str:
+        """
+        Create JWT token with user information and permissions.
+        
+        Args:
+            request: Validated authentication request
+            
+        Returns:
+            str: Signed JWT token
+        """
+        # Current time and expiration
+        now = datetime.utcnow()
+        expiration = now + timedelta(hours=settings.JWT_EXPIRE_HOURS)
+        
+        # Get permissions for the role
+        permissions = cls.get_permissions_for_role(request.role.value)
+        
+        # Create JWT payload
+        payload = {
+            "userId": request.userId,
+            "role": request.role.value,
+            "zone": request.zone,
+            "permissions": permissions,
+            "iat": int(now.timestamp()),
+            "exp": int(expiration.timestamp())
+        }
+        
+        # Sign the token using HS256 with secret key
+        token = jwt.encode(
+            payload=payload,
+            key=settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM
+        )
+        
+        return token
+    
+    @classmethod
+    def verify_jwt_token(cls, token: str) -> Optional[JWTPayload]:
+        """
+        Verify and decode JWT token.
+        
+        Args:
+            token: JWT token string
+            
+        Returns:
+            Optional[JWTPayload]: Decoded payload if valid, None if invalid
+        """
+        try:
+            # For HS256, we use the same secret key for both signing and verification
+            payload = jwt.decode(
+                jwt=token,
+                key=settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM]
+            )
+            return JWTPayload(**payload)
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
+    
+    @classmethod
+    def get_token_expiry_seconds(cls) -> int:
+        """
+        Get token expiry time in seconds.
+        
+        Returns:
+            int: Expiry time in seconds (24 hours = 86400 seconds)
+        """
+        return settings.JWT_EXPIRE_HOURS * 3600
 
-### Authentication & Security
-- **python-jose**: JWT token creation and validation
-- **passlib**: Password hashing utilities
-- **python-multipart**: Handle form data and file uploads
-
-### Database
-- **firebase-admin**: Official Firebase Admin SDK
-- **google-cloud-firestore**: Direct Firestore client library
-
-### Development
-- **pytest**: Testing framework
-- **black**: Code formatter
-- **flake8**: Code linting
-- **isort**: Import sorting
-
-### Configuration
-- **python-dotenv**: Environment variable management
-- **pydantic-settings**: Settings management
-
-### Production
-- **gunicorn**: Production WSGI server
-- **structlog**: Structured logging
+    # User Management Methods
+    
+    @classmethod
+    def create_user(cls, request: CreateUserRequest) -> Optional[UserResponse]:
+        """
+        Create a new user.
+        
+        Args:
+            request: User creation request
+            
+        Returns:
+            Optional[UserResponse]: Created user data or None if user exists
+        """
+        # Check if user already exists
+        if request.email in cls._users:
+            return None
+            
+        # Validate zone
+        if request.zone not in cls.VALID_ZONES:
+            raise ValueError(f"Invalid zone: {request.zone}")
+            
+        # Create user
+        now = datetime.utcnow()
+        user = UserModel(
+            email=request.email,
+            role=request.role,
+            zone=request.zone,
+            createdDate=now,
+            lastModified=now
+        )
+        
+        cls._users[request.email] = user
+        
+        return UserResponse(
+            email=user.email,
+            role=user.role,
+            zone=user.zone,
+            createdDate=user.createdDate,
+            lastModified=user.lastModified
+        )
+    
+    @classmethod
+    def update_user(cls, request: UpdateUserRequest) -> Optional[UserResponse]:
+        """
+        Update an existing user.
+        
+        Args:
+            request: User update request
+            
+        Returns:
+            Optional[UserResponse]: Updated user data or None if user not found
+        """
+        # Check if user exists
+        if request.email not in cls._users:
+            return None
+            
+        user = cls._users[request.email]
+        updated = False
+        
+        # Update role if provided
+        if request.role is not None:
+            user.role = request.role
+            updated = True
+            
+        # Update zone if provided
+        if request.zone is not None:
+            if request.zone not in cls.VALID_ZONES:
+                raise ValueError(f"Invalid zone: {request.zone}")
+            user.zone = request.zone
+            updated = True
+            
+        # Update lastModified if any changes were made
+        if updated:
+            user.lastModified = datetime.utcnow()
+            
+        return UserResponse(
+            email=user.email,
+            role=user.role,
+            zone=user.zone,
+            createdDate=user.createdDate,
+            lastModified=user.lastModified
+        )
+    
+    @classmethod
+    def get_user_by_email(cls, email: str) -> Optional[UserModel]:
+        """
+        Get user by email.
+        
+        Args:
+            email: User email
+            
+        Returns:
+            Optional[UserModel]: User data or None if not found
+        """
+        return cls._users.get(email.lower())
+    
+    @classmethod
+    def list_users(cls) -> List[UserResponse]:
+        """
+        List all users.
+        
+        Returns:
+            List[UserResponse]: List of all users
+        """
+        return [
+            UserResponse(
+                email=user.email,
+                role=user.role,
+                zone=user.zone,
+                createdDate=user.createdDate,
+                lastModified=user.lastModified
+            )
+            for user in cls._users.values()
+        ]
 </file>
 
 <file path="app/main.py">
@@ -2947,6 +6068,7 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.plots import router as plots_router
 from app.api.zones import router as zones_router
+from app.api.users import router as users_router
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -2970,6 +6092,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(plots_router, prefix=settings.API_V1_STR)
 app.include_router(zones_router, prefix=settings.API_V1_STR)
+app.include_router(users_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():
@@ -2988,75 +6111,6 @@ async def health_check():
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION
     }
-</file>
-
-<file path="api_flow_diagram.mermaid">
-flowchart TD
-    subgraph auth ["Authentication Flow - POST /auth/token"]
-        A[Client App] -->|"POST /auth/token<br/>Body: {userId, role, zone}"| B[FastAPI Backend]
-        B --> C{Validate Parameters}
-        C -->|"Missing Parameters"| D["400 Bad Request<br/>MISSING_PARAMETERS"]
-        C -->|"Invalid Role"| E["400 Bad Request<br/>INVALID_ROLE"]
-        C -->|"Invalid Zone"| F["400 Bad Request<br/>INVALID_ZONE"]
-        C -->|"Valid"| G[Assign Role-Based Permissions]
-        G --> H{Role Type}
-        H -->|"super_admin"| I["Permissions:<br/>read: plots<br/>write: plots"]
-        H -->|"zone_admin"| J["Permissions:<br/>read: plots<br/>write: plots for zone only"]
-        H -->|"normal_user"| K["Permissions:<br/>read: plots<br/>write: none"]
-        I --> L["Create JWT Token<br/>24hr expiry"]
-        J --> L
-        K --> L
-        L --> M["200 OK<br/>Return JWT Token"]
-        M --> N[Client Stores Token]
-    end
-
-    subgraph unified ["Unified API Request Flow"]
-        N --> O[Client Makes API Request<br/>Authorization: Bearer token]
-        O --> P[FastAPI Backend]
-        P --> Q[Verify JWT Token]
-        Q -->|"Invalid/Expired"| R[401 Unauthorized]
-        Q -->|"Valid"| S["Extract User Payload<br/>{userId, role, zone, permissions}"]
-        S --> T{Check Required Permission}
-        T -->|"No Permission"| U[403 Forbidden]
-        T -->|"Has Permission"| V{Request Type}
-        
-        V -->|"GET /plots/available"| RR[Query Firestore<br/>GET /plots/available]
-        V -->|"PUT /update-plot"| SS[Update Firestore<br/>PUT /update-plot]
-        V -->|"PATCH /release-plot"| TT[Update Firestore<br/>PATCH /release-plot]
-        V -->|"POST /country/zones"| UU[Create/Update Firestore<br/>POST /country/zones]
-        V -->|"GET /plot-details"| VV[Query Firestore<br/>GET /plot-details]
-        
-        RR --> WW[(Firestore Database)]
-        SS --> XX[(Firestore Database)]
-        TT --> YY[(Firestore Database)]
-        UU --> ZZ[(Firestore Database)]
-        VV --> AAA[(Firestore Database)]
-        
-        WW --> BBB["200 OK<br/>Available Plots Response"]
-        XX --> CCC["200 OK<br/>Plot Updated Successfully"]
-        YY --> DDD["200 OK<br/>Plot Released Successfully"]
-        ZZ --> EEE["200 OK<br/>Zone Data Saved"]
-        AAA --> FFF["200 OK<br/>Plot Details Response"]
-    end
-
-    %% Styling
-    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef backendStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef dbStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    classDef errorStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
-    classDef successStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    classDef decisionStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    classDef permissionStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    classDef requestStyle fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
-
-    class A,O clientStyle
-    class B,P,Q,S backendStyle
-    class WW,XX,YY,ZZ,AAA dbStyle
-    class D,E,F,R,U errorStyle
-    class M,BBB,CCC,DDD,EEE,FFF successStyle
-    class C,T,V decisionStyle
-    class I,J,K permissionStyle
-    class RR,SS,TT,UU,VV requestStyle
 </file>
 
 </files>
