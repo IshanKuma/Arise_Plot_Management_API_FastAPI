@@ -282,21 +282,19 @@ class PlotDetailsMetadata(BaseModel):
 
 class PlotDetailsItem(BaseModel):
     """
-    Individual plot item for plot details response.
+    Simplified plot item for plot details response.
     
-    Logic: More detailed information than basic plot response,
-    includes business and allocation details.
+    Logic: Returns only essential plot information without null-heavy fields.
+    Focuses on core plot identification and basic characteristics.
     """
-    plotName: str = Field(..., max_length=50)
-    category: PlotCategory
-    areaInHa: float = Field(..., gt=0)
-    sector: Optional[str] = Field(None, max_length=50)
-    activity: Optional[str] = Field(None, max_length=100)
-    plotStatus: PlotStatus
-    companyName: Optional[str] = Field(None, max_length=100)
-    allocatedDate: Optional[date] = None
-    investmentAmount: Optional[float] = Field(None, ge=0)
-    employmentGenerated: Optional[int] = Field(None, ge=0)
+    plotName: str = Field(..., max_length=50, description="Plot identifier")
+    status: str = Field(..., max_length=20, description="Plot status")
+    category: str = Field(..., max_length=20, description="Plot category")
+    phase: str = Field(..., max_length=10, description="Development phase")
+    areaInSqm: float = Field(..., ge=0, description="Area in square meters")
+    areaInHa: float = Field(..., ge=0, description="Area in hectares")
+    country: str = Field(..., max_length=50, description="Country name")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
 
 
 class PlotDetailsQueryParams(BaseModel):

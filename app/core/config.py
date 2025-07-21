@@ -10,24 +10,16 @@ class Settings(BaseSettings):
     """Application settings configuration."""
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"
+    JWT_SECRET_KEY: str = "arise-plot-management-super-secret-key-change-in-production-2025"
     JWT_ALGORITHM: str = "HS256" 
     JWT_EXPIRE_HOURS: int = 24
     
     # Authentication Secret Key (for token generation authorization)
     AUTH_SECRET_KEY: str = "arise-master-auth-secret-2025"
     
-    # Firebase Configuration
-    FIREBASE_PROJECT_ID: str = "your-firebase-project-id"
-    FIREBASE_CREDENTIALS_PATH: str = "/home/user/Desktop/arise_fastapi/credentials/firebase-service-account.json"
-    FIREBASE_PRIVATE_KEY_ID: str = "your-private-key-id"
-    FIREBASE_PRIVATE_KEY: str = ""
-    FIREBASE_CLIENT_EMAIL: str = ""
-    FIREBASE_CLIENT_ID: str = ""
-    FIREBASE_AUTH_URI: str = "https://accounts.google.com/o/oauth2/auth"
-    FIREBASE_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
-    FIREBASE_AUTH_PROVIDER_X509_CERT_URL: str = "https://www.googleapis.com/oauth2/v1/certs"
-    FIREBASE_CLIENT_X509_CERT_URL: str = ""
+    # Firebase Configuration - Using Service Account JSON File
+    FIREBASE_PROJECT_ID: str = "arise-ipp"
+    FIREBASE_CREDENTIALS_PATH: str = "./firebase-service-account.json"
     
     # Application Settings
     APP_NAME: str = "Arise Plot Management API"

@@ -18,18 +18,49 @@ from app.schemas.plots import (
 class FirestoreService:
     """
     Service for Firestore database operations.
-    Real Firebase Firestore integration.
+    Updated to work with actual country-specific database structure.
     
-    Logic: Maintains separate collections for plots and zones,
-    with role-based access control for data operations.
+    Logic: Handles country-specific plot collections and existing data formats.
     """
     
     def __init__(self):
         """Initialize Firestore client and collection references."""
         self.db = get_firestore_db()
+        # Use the configured collections (now pointing to actual structure)
         self.plots_collection = self.db.collection(settings.FIRESTORE_COLLECTION_PLOTS)
         self.zones_collection = self.db.collection(settings.FIRESTORE_COLLECTION_ZONES)
         self.users_collection = self.db.collection(settings.FIRESTORE_COLLECTION_USERS)
+        
+        # Country-specific plot collections mapping
+        self.country_plot_collections = {
+            "gabon": "gabon-plots",
+            "benin": "benin-plots", 
+            "togo": "togo-plots",
+            "roc": "roc-plots",
+            "rwanda": "rwanda-plots",
+            "drc": "drc-plots",
+            "nigeria": "nigeria-plots",
+            "tanzania": "tanzania-plots"
+        }
+
+    def get_plot_collection_name(self, country: str) -> str:
+        """Get the correct collection name for a country."""
+        country_lower = country.lower()
+        return self.country_plot_collections.get(country_lower, f"{country_lower}-plots")
+
+    def _parse_area(self, area_str: str) -> float:
+        """Parse area string to float, handling empty strings and None."""
+        try:
+            if isinstance(area_str, (int, float)):
+                return float(area_str)
+            if not area_str or area_str.strip() == '':
+                return 0.0
+            # Remove any non-numeric characters except decimal point
+            import re
+            numeric_str = re.sub(r'[^\d.]', '', str(area_str))
+            return float(numeric_str) if numeric_str else 0.0
+        except Exception:
+            return 0.0
 
     def _convert_firestore_timestamp(self, timestamp) -> Optional[str]:
         """Convert Firestore timestamp to ISO string format."""
@@ -276,77 +307,87 @@ class FirestoreService:
 
     async def get_plot_details(self, params: PlotDetailsQueryParams, user_zone: Optional[str] = None) -> PlotDetailsResponse:
         """
-        Get detailed plot information for a specific zone.
+        Get simplified plot information for a specific country using actual database structure.
         
         Logic:
-        - Returns comprehensive plot data including business details
-        - Provides metadata with summary statistics
-        - Zone admin can only access their assigned zone
+        - Uses country-specific collections (e.g., gabon-plots, benin-plots)
+        - Returns only essential plot fields without null-heavy data
+        - Handles nested 'details' objects in documents
         
         Args:
             params: Query parameters (country, zoneCode)
             user_zone: User's zone (for zone_admin access control)
             
         Returns:
-            PlotDetailsResponse: Detailed plot information with metadata
+            PlotDetailsResponse: Simplified plot information with metadata
             
         Raises:
             PermissionError: If zone access denied
         """
-        # Check zone access for zone_admin
-        if user_zone and user_zone != params.zoneCode:
-            raise PermissionError("Access denied: zone not in your assigned zone")
-        
-        # Query plots by country and zone
-        query = (self.plots_collection
-                .where("country", "==", params.country)
-                .where("zoneCode", "==", params.zoneCode))
-        
-        docs = list(query.stream())
-        
-        # Process plot data
-        plot_items = []
-        available_count = 0
-        
-        for doc in docs:
-            doc_data = doc.to_dict()
-            doc_data = self._prepare_plot_for_response(doc_data)
+        try:
+            # Check zone access for zone_admin
+            if user_zone and user_zone != params.zoneCode:
+                raise PermissionError("Access denied: zone not in your assigned zone")
             
-            # Count available plots
-            if doc_data.get("plotStatus") == "Available":
-                available_count += 1
+            # Get the correct collection for the country
+            collection_name = self.get_plot_collection_name(params.country)
+            plots_collection = self.db.collection(collection_name)
             
-            # Convert to plot detail item
-            allocated_date = None
-            if doc_data.get("allocatedDate"):
-                if isinstance(doc_data["allocatedDate"], str):
-                    allocated_date = datetime.fromisoformat(doc_data["allocatedDate"]).date()
-                elif hasattr(doc_data["allocatedDate"], 'date'):
-                    allocated_date = doc_data["allocatedDate"].date()
+            # Get all plots for the country
+            docs = list(plots_collection.stream())
             
-            plot_item = PlotDetailsItem(
-                plotName=doc_data.get("plotName"),
-                category=doc_data.get("category"),
-                areaInHa=doc_data.get("areaInHa"),
-                sector=doc_data.get("sector"),
-                activity=doc_data.get("activity"),
-                plotStatus=doc_data.get("plotStatus"),
-                companyName=doc_data.get("companyName"),
-                allocatedDate=allocated_date,
-                investmentAmount=doc_data.get("investmentAmount"),
-                employmentGenerated=doc_data.get("employmentGenerated")
+            # Process plot data with simplified logic
+            plot_items = []
+            available_count = 0
+            
+            for doc in docs:
+                try:
+                    doc_data = doc.to_dict()
+                    details = doc_data.get('details', {})
+                    
+                    # Extract essential data with defaults
+                    plot_name = doc_data.get('name', f"Plot-{doc.id}")
+                    status = details.get('plotStatus', 'Available')
+                    category = details.get('category', '')
+                    phase = str(details.get('phase', '1'))
+                    area_sqm = self._parse_area(details.get('areaInSqm', '0'))
+                    area_ha = self._parse_area(details.get('areaInHa', '0'))
+                    
+                    # Count available plots
+                    if status.lower() in ['available', '']:
+                        available_count += 1
+                    
+                    # Create simplified plot item
+                    plot_item = PlotDetailsItem(
+                        plotName=plot_name,
+                        status=status,
+                        category=category,
+                        phase=phase,
+                        areaInSqm=area_sqm,
+                        areaInHa=area_ha,
+                        country=params.country,
+                        zoneCode=params.zoneCode
+                    )
+                    plot_items.append(plot_item)
+                    
+                except Exception as e:
+                    # Skip invalid documents but continue processing
+                    print(f"⚠️ Skipping invalid plot document {doc.id}: {e}")
+                    continue
+            
+            # Create metadata
+            metadata = PlotDetailsMetadata(
+                country=params.country,
+                zoneCode=params.zoneCode,
+                totalPlots=len(plot_items),
+                availablePlots=available_count
             )
-            plot_items.append(plot_item)
-        
-        # Create metadata
-        metadata = PlotDetailsMetadata(
-            country=params.country,
-            zoneCode=params.zoneCode,
-            totalPlots=len(docs),
-            availablePlots=available_count
-        )
-        
-        return PlotDetailsResponse(metadata=metadata, plots=plot_items)
+            
+            return PlotDetailsResponse(metadata=metadata, plots=plot_items)
+            
+        except Exception as e:
+            print(f"❌ Error in get_plot_details: {e}")
+            raise
 
     async def create_plot(self, plot_data: Dict[str, Any]) -> Dict[str, Any]:
         """

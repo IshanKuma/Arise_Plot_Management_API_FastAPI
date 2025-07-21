@@ -29,33 +29,14 @@ class FirebaseClient:
         try:
             # Check if Firebase app is already initialized
             if not firebase_admin._apps:
-                # Method 1: Use service account JSON file (recommended)
+                # Use service account JSON file (primary method)
                 if hasattr(settings, 'FIREBASE_CREDENTIALS_PATH') and os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
+                    print(f"🔥 Initializing Firebase with service account: {settings.FIREBASE_CREDENTIALS_PATH}")
                     cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-                    firebase_admin.initialize_app(cred, {
-                        'projectId': settings.FIREBASE_PROJECT_ID
-                    })
-                
-                # Method 2: Use individual environment variables
-                elif settings.FIREBASE_PRIVATE_KEY and settings.FIREBASE_CLIENT_EMAIL:
-                    cred_dict = {
-                        "type": "service_account",
-                        "project_id": settings.FIREBASE_PROJECT_ID,
-                        "private_key_id": settings.FIREBASE_PRIVATE_KEY_ID,
-                        "private_key": settings.FIREBASE_PRIVATE_KEY.replace('\\n', '\n'),
-                        "client_email": settings.FIREBASE_CLIENT_EMAIL,
-                        "client_id": settings.FIREBASE_CLIENT_ID,
-                        "auth_uri": settings.FIREBASE_AUTH_URI,
-                        "token_uri": settings.FIREBASE_TOKEN_URI,
-                        "auth_provider_x509_cert_url": settings.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
-                        "client_x509_cert_url": settings.FIREBASE_CLIENT_X509_CERT_URL
-                    }
-                    cred = credentials.Certificate(cred_dict)
                     firebase_admin.initialize_app(cred)
-                
-                # Method 3: Use default credentials (for Cloud environments)
                 else:
-                    firebase_admin.initialize_app()
+                    print(f"❌ Firebase service account file not found at: {settings.FIREBASE_CREDENTIALS_PATH}")
+                    raise Exception(f"Firebase service account file not found at: {settings.FIREBASE_CREDENTIALS_PATH}")
             
             # Initialize Firestore client
             self._db = firestore.client()
@@ -63,6 +44,9 @@ class FirebaseClient:
             
         except Exception as e:
             print(f"❌ Firebase initialization failed: {str(e)}")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Credentials path: {settings.FIREBASE_CREDENTIALS_PATH}")
+            print(f"File exists: {os.path.exists(settings.FIREBASE_CREDENTIALS_PATH)}")
             raise
     
     @property
