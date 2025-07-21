@@ -53,6 +53,7 @@ logs/
 # Firebase
 firebase-debug.log
 .firebase/
+firebase-service-account.json
 
 # Testing
 .coverage
