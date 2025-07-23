@@ -131,43 +131,28 @@ class PlotUpdateRequest(BaseModel):
     """
     Request schema for PUT /update-plot endpoint.
     
-    Logic: Complete plot update with business allocation details.
-    Used when allocating a plot to a company with full information.
+    Logic: Simple plot update matching GET response format exactly.
     """
-    country: str = Field(..., max_length=50, description="Country name")
-    zoneCode: str = Field(..., max_length=10, description="Zone code")
-    phase: int = Field(..., gt=0, description="Phase number (positive integer)")
     plotName: str = Field(..., max_length=50, description="Plot identifier")
-    companyName: Optional[str] = Field(None, max_length=100, description="Company name for allocation")
-    sector: Optional[str] = Field(None, max_length=50, description="Business sector")
     plotStatus: PlotStatus = Field(..., description="Plot status")
-    activity: Optional[str] = Field(None, max_length=100, description="Business activity description")
-    investmentAmount: Optional[float] = Field(None, ge=0, description="Investment amount in USD")
-    employmentGenerated: Optional[int] = Field(None, ge=0, description="Number of jobs created")
-    allocatedDate: Optional[date] = Field(None, description="Allocation date (YYYY-MM-DD)")
-    expiryDate: Optional[date] = Field(None, description="Expiry date (YYYY-MM-DD)")
-
-    @validator('zoneCode')
-    def validate_zone_code(cls, v):
-        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
-            raise ValueError('Zone code must be 4-6 uppercase letters')
-        return v
+    category: PlotCategory = Field(..., description="Plot category")
+    phase: int = Field(..., description="Phase number")
+    areaInSqm: str = Field(..., description="Area in square meters as string")
+    areaInHa: str = Field(..., description="Area in hectares as string")
+    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    country: str = Field(..., max_length=50, description="Country name")
 
     class Config:
         schema_extra = {
             "example": {
-                "country": "Gabon",
-                "zoneCode": "GSEZ",
+                "plotName": "C-4G  TEMPORARY",
+                "plotStatus": "Available",
+                "category": "Industrial", 
                 "phase": 1,
-                "plotName": "GSEZ-R-001",
-                "companyName": "TechCorp Ltd",
-                "sector": "Technology",
-                "plotStatus": "Allocated",
-                "activity": "Software Development",
-                "investmentAmount": 1000000.0,
-                "employmentGenerated": 50,
-                "allocatedDate": "2024-07-04",
-                "expiryDate": "2029-07-04"
+                "areaInSqm": "0.0",
+                "areaInHa": "0.0",
+                "zoneCode": "UNKNOWN",
+                "country": "Gabon"
             }
         }
 
@@ -230,11 +215,8 @@ class ZoneCreateRequest(BaseModel):
     """
     country: str = Field(..., max_length=50, description="Country name")
     zoneCode: str = Field(..., max_length=10, description="Unique zone identifier")
-    phase: int = Field(..., gt=0, description="Phase number (positive integer)")
-    landArea: float = Field(..., gt=0, description="Total land area in hectares")
-    zoneName: Optional[str] = Field(None, max_length=100, description="Descriptive zone name")
-    zoneType: Optional[str] = Field(None, max_length=30, description="SEZ, Industrial, Commercial")
-    establishedDate: Optional[date] = Field(None, description="Establishment date (YYYY-MM-DD)")
+    phase: str = Field(..., description="Phase number as string")
+    landArea: str = Field(..., description="Land area with unit (e.g., '120 Ha')")
 
     @validator('zoneCode')
     def validate_zone_code(cls, v):
@@ -242,30 +224,23 @@ class ZoneCreateRequest(BaseModel):
             raise ValueError('Zone code must be 4-6 uppercase letters')
         return v
 
-    @validator('zoneType')
-    def validate_zone_type(cls, v):
-        if v and v not in ['SEZ', 'Industrial', 'Commercial']:
-            raise ValueError('Zone type must be one of: SEZ, Industrial, Commercial')
-        return v
-
     class Config:
         schema_extra = {
             "example": {
                 "country": "Gabon",
-                "zoneCode": "NSEZ",
-                "phase": 1,
-                "landArea": 150.5,
-                "zoneName": "New Special Economic Zone",
-                "zoneType": "SEZ",
-                "establishedDate": "2024-07-04"
+                "zoneCode": "GSEZ",
+                "phase": "1",
+                "landArea": "120 Ha"
             }
         }
 
 
 class ZoneCreateResponse(BaseModel):
     """Response schema for POST /country/zones endpoint."""
-    message: str = Field(..., max_length=100)
+    country: str = Field(..., max_length=50)
     zoneCode: str = Field(..., max_length=10)
+    phase: str = Field(..., description="Phase number as string")
+    landArea: str = Field(..., description="Land area with unit")
 
 
 class PlotDetailsMetadata(BaseModel):
