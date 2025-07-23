@@ -87,12 +87,12 @@ class FirestoreService:
         is_zone_admin: bool = False
     ) -> List[PlotResponse]:
         """
-        Query plots from Firestore with filtering and role-based access.
+        Query plots from Firestore with filtering and role-based access using dynamic collections.
         
-        Implements the exact logic from flowchart:
-        1. Apply query parameters (country, zoneCode, category, phase)
-        2. Apply role-based filtering (zone_admin gets zone-specific data)
-        3. Return filtered plot list
+        Updated to handle actual Firestore data structure:
+        - Data is nested under 'details' field
+        - plotStatus filtering for available plots only
+        - Proper field mapping from Firestore to API response
         
         Args:
             query_params: Query filters from request
@@ -100,46 +100,114 @@ class FirestoreService:
             is_zone_admin: Whether user is zone_admin (affects filtering)
             
         Returns:
-            List[PlotResponse]: Filtered list of plots
+            List[PlotResponse]: Filtered list of available plots
         """
         
-        # Start with base query
-        query = self.plots_collection
-        
-        # Apply role-based filtering first (as per flowchart logic)
-        if is_zone_admin and user_zone:
-            # Zone admin only sees plots in their zone
-            query = query.where("zoneCode", "==", user_zone)
-        
-        # Apply query parameter filters
+        # Step 1: Determine target collection based on country parameter
         if query_params.country:
-            query = query.where("country", "==", query_params.country)
+            # Use country-specific collection based on the provided country
+            collection_name = self.get_plot_collection_name(query_params.country)
+            plots_collection = self.db.collection(collection_name)
+        else:
+            # If no country specified, default to gabon-plots collection
+            plots_collection = self.db.collection("gabon-plots")
         
-        if query_params.zoneCode:
-            query = query.where("zoneCode", "==", query_params.zoneCode)
-            
-        if query_params.category:
-            query = query.where("category", "==", query_params.category.value)
-            
-        if query_params.phase:
-            query = query.where("phase", "==", query_params.phase)
-        
-        # Execute query and convert to response format
-        docs = query.stream()
+        # Step 2: Get all documents (no where clauses due to nested structure)
+        docs = list(plots_collection.stream())
         plots = []
         
         for doc in docs:
-            doc_data = doc.to_dict()
-            doc_data = self._prepare_plot_for_response(doc_data)
-            plots.append(PlotResponse(**doc_data))
+            try:
+                doc_data = doc.to_dict()
+                details = doc_data.get('details', {})
+                
+                # Step 3: Filter for available plots only
+                plot_status = details.get('plotStatus', '').strip()
+                
+                # Consider plots available if status is "Available" or empty string
+                if plot_status.lower() not in ['available', '']:
+                    continue
+                
+                # Step 4: Extract and map fields from nested structure
+                plot_name = details.get('name', f"Plot-{doc.id}")
+                category_str = details.get('category', 'Industrial')  # Default to Industrial
+                area_sqm = self._parse_area(details.get('areaInSqm', '0'))
+                area_ha = self._parse_area(details.get('areaInHa', '0'))
+                
+                # If area_ha is 0 but area_sqm exists, calculate hectares
+                if area_ha == 0.0 and area_sqm > 0:
+                    area_ha = area_sqm / 10000  # Convert sqm to hectares
+                
+                # Map category to valid enum value
+                category_mapping = {
+                    'residential': 'Residential',
+                    'commercial': 'Commercial', 
+                    'industrial': 'Industrial',
+                    'facility/utility': 'Industrial',  # Map facility to Industrial
+                    '': 'Industrial'  # Default empty to Industrial
+                }
+                category = category_mapping.get(category_str.lower(), 'Industrial')
+                
+                # Step 5: Apply query parameter filters (client-side filtering)
+                # Filter by country if specified (assume collection name indicates country)
+                if query_params.country:
+                    expected_collection = self.get_plot_collection_name(query_params.country)
+                    if collection_name != expected_collection:
+                        continue
+                
+                # Filter by zoneCode if specified (would need zoneCode in data)
+                if query_params.zoneCode:
+                    # Skip if zoneCode filtering requested but no zoneCode in data
+                    doc_zone = details.get('zoneCode', '')
+                    if doc_zone != query_params.zoneCode:
+                        continue
+                
+                # Filter by category if specified
+                if query_params.category and query_params.category.value != category:
+                    continue
+                
+                # Filter by phase if specified (would need phase in data)
+                if query_params.phase:
+                    doc_phase = details.get('phase', 1)
+                    try:
+                        if int(doc_phase) != query_params.phase:
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                
+                # Step 6: Apply role-based filtering
+                if is_zone_admin and user_zone:
+                    doc_zone = details.get('zoneCode', '')
+                    if doc_zone != user_zone:
+                        continue
+                
+                # Step 7: Create response object with mapped fields
+                plot_response = PlotResponse(
+                    plotName=plot_name,
+                    plotStatus=PlotStatus.AVAILABLE,  # We only return available plots
+                    category=PlotCategory(category),
+                    phase=1,  # Default phase since not in current data structure
+                    areaInSqm=Decimal(str(area_sqm)),
+                    areaInHa=Decimal(str(area_ha)),
+                    zoneCode=details.get('zoneCode', 'UNKNOWN'),  # Default if missing
+                    country=query_params.country or "Gabon"  # Use query param or default
+                )
+                
+                plots.append(plot_response)
+                
+            except Exception as e:
+                # Skip invalid documents and continue
+                print(f"⚠️ Skipping invalid plot document {doc.id}: {e}")
+                continue
         
         return plots
 
     async def update_plot(self, request: PlotUpdateRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
         """
-        Update plot information with business allocation details.
+        Update plot information with business allocation details using dynamic collections.
         
         Logic: 
+        - Uses country-specific collection based on request.country
         - Validates plot exists and user has access
         - Updates all provided fields (complete resource update - PUT semantics)
         - Zone admin can only update plots in their zone
@@ -155,8 +223,12 @@ class FirestoreService:
             ValueError: If plot not found
             PermissionError: If zone access denied
         """
-        # Build query to find the plot
-        query = (self.plots_collection
+        # Get country-specific collection
+        collection_name = self.get_plot_collection_name(request.country)
+        plots_collection = self.db.collection(collection_name)
+        
+        # Build query to find the plot in the correct collection
+        query = (plots_collection
                 .where("plotName", "==", request.plotName)
                 .where("zoneCode", "==", request.zoneCode)
                 .where("country", "==", request.country))
@@ -200,9 +272,10 @@ class FirestoreService:
 
     async def release_plot(self, request: PlotReleaseRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
         """
-        Release a plot by setting status to available and clearing allocation data.
+        Release a plot by setting status to available and clearing allocation data using dynamic collections.
         
         Logic:
+        - Uses country-specific collection based on request.country
         - Different from update_plot - only changes status (PATCH semantics)
         - Clears all business allocation fields
         - Zone admin can only release plots in their zone
@@ -218,8 +291,12 @@ class FirestoreService:
             ValueError: If plot not found
             PermissionError: If zone access denied
         """
-        # Build query to find the plot
-        query = (self.plots_collection
+        # Get country-specific collection
+        collection_name = self.get_plot_collection_name(request.country)
+        plots_collection = self.db.collection(collection_name)
+        
+        # Build query to find the plot in the correct collection
+        query = (plots_collection
                 .where("plotName", "==", request.plotName)
                 .where("zoneCode", "==", request.zoneCode)
                 .where("country", "==", request.country))
