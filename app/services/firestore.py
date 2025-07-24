@@ -271,6 +271,7 @@ class FirestoreService:
         - Different from update_plot - only changes status (PATCH semantics)
         - Clears all business allocation fields
         - Zone admin can only release plots in their zone
+        - If zoneCode not provided, looks up plot by country and plotName first
         
         Args:
             request: Plot release request data
@@ -287,21 +288,49 @@ class FirestoreService:
         collection_name = self.get_plot_collection_name(request.country)
         plots_collection = self.db.collection(collection_name)
         
-        # Build query to find the plot in the correct collection
-        query = (plots_collection
-                .where("plotName", "==", request.plotName)
-                .where("zoneCode", "==", request.zoneCode)
-                .where("country", "==", request.country))
+        print(f"🔍 Searching for plot in collection: {collection_name}")
+        print(f"🔍 Search criteria - Country: {request.country}, PlotName: {request.plotName}, ZoneCode: {request.zoneCode}")
+        
+        # Build query to find the plot
+        if request.zoneCode:
+            # If zoneCode provided, use it in the query
+            query = (plots_collection
+                    .where("name", "==", request.plotName)
+                    .where("zoneCode", "==", request.zoneCode)
+                    .where("country", "==", request.country))
+        else:
+            # If zoneCode not provided, find by country and plotName only
+            query = (plots_collection
+                    .where("name", "==", request.plotName)
+                    .where("country", "==", request.country))
         
         docs = list(query.stream())
+        print(f"🔍 Found {len(docs)} matching documents")
         
         if not docs:
+            # Let's try to find any plots with similar names for debugging
+            debug_query = plots_collection.where("country", "==", request.country).limit(5)
+            debug_docs = list(debug_query.stream())
+            print(f"🔍 DEBUG: Found {len(debug_docs)} total plots in {request.country}")
+            for doc in debug_docs:
+                data = doc.to_dict()
+                print(f"🔍 DEBUG: Plot - Name: '{data.get('name')}', Zone: '{data.get('zoneCode')}'")
+                print(f"🔍 DEBUG: All fields: {list(data.keys())}")
+                if 'details' in data:
+                    details = data['details']
+                    print(f"🔍 DEBUG: Details fields: {list(details.keys())}")
+                    print(f"🔍 DEBUG: Details name: '{details.get('name')}'")
+                break  # Only show first plot for debugging
             raise ValueError("Plot not found")
         
         plot_doc = docs[0]
+        plot_data = plot_doc.to_dict()
+        
+        # Get the actual zoneCode from the plot data
+        actual_zone_code = plot_data.get("zoneCode")
         
         # Check zone access for zone_admin
-        if user_zone and user_zone != request.zoneCode:
+        if user_zone and user_zone != actual_zone_code:
             raise PermissionError("Access denied: plot not in your assigned zone")
         
         # Release the plot - clear allocation data
@@ -322,6 +351,7 @@ class FirestoreService:
         return {
             "message": "Plot released successfully",
             "plotName": request.plotName,
+            "zoneCode": actual_zone_code,
             "status": "available"
         }
 

@@ -172,7 +172,7 @@ class PlotReleaseRequest(BaseModel):
     Different from PUT because it only changes status, doesn't update business details.
     """
     country: str = Field(..., max_length=50, description="Country name")
-    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    zoneCode: Optional[str] = Field(None, max_length=10, description="Zone code (optional - will be looked up)")
     plotName: str = Field(..., max_length=50, description="Plot identifier")
     plotStatus: str = Field(..., description="Must be 'available'")
 
@@ -184,7 +184,7 @@ class PlotReleaseRequest(BaseModel):
 
     @validator('zoneCode')
     def validate_zone_code(cls, v):
-        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
+        if v and (not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha()):
             raise ValueError('Zone code must be 4-6 uppercase letters')
         return v
 
@@ -192,8 +192,7 @@ class PlotReleaseRequest(BaseModel):
         schema_extra = {
             "example": {
                 "country": "Gabon",
-                "zoneCode": "GSEZ",
-                "plotName": "GSEZ-C-002",
+                "plotName": "C-4G  TEMPORARY", 
                 "plotStatus": "available"
             }
         }
@@ -203,6 +202,7 @@ class PlotReleaseResponse(BaseModel):
     """Response schema for PATCH /release-plot endpoint."""
     message: str = Field(..., max_length=100)
     plotName: str = Field(..., max_length=50)
+    zoneCode: str = Field(..., max_length=10, description="Zone code of the released plot")
     status: str = Field(..., max_length=20)
 
 

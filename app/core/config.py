@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # Database Settings
     DATABASE_URL: str = "firestore"
     FIRESTORE_COLLECTION_PLOTS: str = "plots"
-    FIRESTORE_COLLECTION_ZONES: str = "zones"
-    FIRESTORE_COLLECTION_USERS: str = "users"
+    FIRESTORE_COLLECTION_ZONES: str = "zone-master"
+    FIRESTORE_COLLECTION_USERS: str = "admin-access"
     
     # Logging
     LOG_LEVEL: str = "INFO"

@@ -27,9 +27,6 @@ class AuthService:
         "normal_user": {"read": ["plots", "zones"], "write": []}
     }
     
-    # Valid zone codes (can be extended based on requirements)
-    VALID_ZONES = ["GSEZ", "OSEZ", "GABON", "TEST"]
-    
     @classmethod
     def validate_request(cls, request: AuthTokenRequest, secret_key: str) -> Optional[str]:
         """
@@ -50,10 +47,7 @@ class AuthService:
         if request.role not in [role.value for role in UserRole]:
             return "INVALID_ROLE"
             
-        # Check if zone is valid
-        if request.zone not in cls.VALID_ZONES:
-            return "INVALID_ZONE"
-            
+        # No zone validation - users have freedom to specify any zone
         return None
     
     @classmethod
@@ -159,11 +153,7 @@ class AuthService:
         if existing_docs:
             return None
             
-        # Validate zone
-        if request.zone not in self.VALID_ZONES:
-            raise ValueError(f"Invalid zone: {request.zone}")
-            
-        # Create user document
+        # Create user document (no zone validation - users have freedom)
         now = datetime.utcnow()
         user_data = {
             "email": request.email,
@@ -216,10 +206,8 @@ class AuthService:
             user_data["role"] = request.role.value
             updated = True
             
-        # Update zone if provided
+        # Update zone if provided (no validation - users have freedom)
         if request.zone is not None:
-            if request.zone not in self.VALID_ZONES:
-                raise ValueError(f"Invalid zone: {request.zone}")
             update_data["zone"] = request.zone
             user_data["zone"] = request.zone
             updated = True

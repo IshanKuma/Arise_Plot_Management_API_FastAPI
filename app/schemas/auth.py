@@ -172,11 +172,11 @@ class UpdateUserRequest(BaseModel):
     As per API specification:
     - email: string, valid email format, mandatory (identifier)
     - role: string, max 20 chars, optional (super_admin, zone_admin, normal_user)  
-    - zone: string, max 10 chars, optional (valid zone code)
+    - zone: string, max 50 chars, optional (country name or zone identifier)
     """
     email: str = Field(..., max_length=100, description="Valid email address of user to update")
     role: Optional[UserRole] = Field(None, description="New user role: super_admin, zone_admin, or normal_user")
-    zone: Optional[str] = Field(None, max_length=10, description="New valid zone code (e.g., GSEZ, OSEZ)")
+    zone: Optional[str] = Field(None, max_length=50, description="Zone or country name (e.g., 'Nigeria', 'Ghana')")
     
     @validator('email')
     def validate_email(cls, v):
@@ -187,10 +187,10 @@ class UpdateUserRequest(BaseModel):
         return v.lower()
     
     @validator('zone')
-    def validate_zone_code(cls, v):
-        """Validate zone code format: 4-6 uppercase letters."""
-        if v and (not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6)):
-            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
+    def validate_zone(cls, v):
+        """Validate zone - accept country names or zone codes."""
+        if v and len(v.strip()) == 0:
+            raise ValueError('Zone cannot be empty')
         return v
 
     class Config:
@@ -199,7 +199,7 @@ class UpdateUserRequest(BaseModel):
             "example": {
                 "email": "user@example.com",
                 "role": "normal_user",
-                "zone": "OSEZ"
+                "zone": "Nigeria"
             }
         }
 
