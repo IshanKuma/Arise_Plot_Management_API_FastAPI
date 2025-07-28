@@ -357,11 +357,12 @@ class FirestoreService:
 
     async def create_zone(self, request: ZoneCreateRequest) -> Dict[str, Any]:
         """
-        Create or update zone master data.
+        Create or update zone master data with custom document naming.
         
         Logic:
         - Essential for establishing economic zones before creating plots
-        - Validates zone code uniqueness (handles both flat and nested structures)
+        - Uses document ID format: {country}_{zoneCode} (e.g., "Gabon_GSEZ")
+        - Validates zone code uniqueness by checking document existence
         - Uses simplified format matching existing data structure
         
         Args:
@@ -374,14 +375,14 @@ class FirestoreService:
             ValueError: If zone code already exists
         """
         try:
-            # Check if zone already exists (country + zoneCode combination)
-            existing_query = (self.zones_collection
-                             .where("zoneCode", "==", request.zoneCode)
-                             .where("country", "==", request.country))
+            # Create document ID using {country}_{zoneCode} format
+            document_id = f"{request.country}_{request.zoneCode}"
             
-            existing_docs = list(existing_query.stream())
+            # Check if zone already exists by checking document ID
+            zone_doc_ref = self.zones_collection.document(document_id)
+            existing_doc = zone_doc_ref.get()
             
-            if existing_docs:
+            if existing_doc.exists:
                 raise ValueError(f"Zone code '{request.zoneCode}' already exists in {request.country}")
             
             # Prepare zone data in the simplified format
@@ -394,8 +395,8 @@ class FirestoreService:
                 "updatedAt": firestore.SERVER_TIMESTAMP
             }
             
-            # Add new zone document
-            doc_ref = self.zones_collection.add(zone_data)
+            # Set the document with the specific ID {country}_{zoneCode}
+            zone_doc_ref.set(zone_data)
             
             # Return the created zone data (matching response schema)
             return {

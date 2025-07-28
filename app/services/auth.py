@@ -138,7 +138,7 @@ class AuthService:
     
     def create_user(self, request: CreateUserRequest) -> Optional[UserResponse]:
         """
-        Create a new user in Firestore.
+        Create a new user in Firestore admin-access collection under 'admin_users' document.
         
         Args:
             request: User creation request
@@ -146,39 +146,56 @@ class AuthService:
         Returns:
             Optional[UserResponse]: Created user data or None if user exists
         """
-        # Check if user already exists
-        existing_query = self.users_collection.where("email", "==", request.email).limit(1)
-        existing_docs = list(existing_query.stream())
+        # Reference the specific 'admin_users' document
+        admin_users_doc = self.users_collection.document("admin_users")
         
-        if existing_docs:
-            return None
-            
-        # Create user document (no zone validation - users have freedom)
+        # Get current users data
+        doc_snapshot = admin_users_doc.get()
+        
+        if doc_snapshot.exists:
+            users_data = doc_snapshot.to_dict()
+            users_list = users_data.get("users", [])
+        else:
+            users_list = []
+        
+        # Check if user already exists
+        for user in users_list:
+            if user.get("email") == request.email:
+                return None  # User already exists
+        
+        # Create new user data (no zone validation - users have freedom)
         now = datetime.utcnow()
-        user_data = {
+        new_user = {
             "email": request.email,
             "role": request.role.value,
             "zone": request.zone,
             "createdDate": now,
             "lastModified": now,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-            "updatedAt": firestore.SERVER_TIMESTAMP
+            "createdAt": now,  # Use actual datetime instead of SERVER_TIMESTAMP
+            "updatedAt": now   # Use actual datetime instead of SERVER_TIMESTAMP
         }
         
-        # Add user to Firestore
-        self.users_collection.add(user_data)
+        # Add new user to the list
+        users_list.append(new_user)
+        
+        # Update the admin_users document
+        admin_users_doc.set({
+            "users": users_list,
+            "lastUpdated": firestore.SERVER_TIMESTAMP,
+            "totalUsers": len(users_list)
+        })
         
         return UserResponse(
-            email=user_data["email"],
-            role=UserRole(user_data["role"]),
-            zone=user_data["zone"],
-            createdDate=user_data["createdDate"],
-            lastModified=user_data["lastModified"]
+            email=new_user["email"],
+            role=UserRole(new_user["role"]),
+            zone=new_user["zone"],
+            createdDate=new_user["createdDate"],
+            lastModified=new_user["lastModified"]
         )
     
     def update_user(self, request: UpdateUserRequest) -> Optional[UserResponse]:
         """
-        Update an existing user in Firestore.
+        Update an existing user in Firestore admin-access collection under 'admin_users' document.
         
         Args:
             request: User update request
@@ -186,41 +203,57 @@ class AuthService:
         Returns:
             Optional[UserResponse]: Updated user data or None if user not found
         """
-        # Find user document
-        user_query = self.users_collection.where("email", "==", request.email).limit(1)
-        docs = list(user_query.stream())
+        # Reference the specific 'admin_users' document
+        admin_users_doc = self.users_collection.document("admin_users")
         
-        if not docs:
-            return None
-            
-        user_doc = docs[0]
-        user_data = user_doc.to_dict()
+        # Get current users data
+        doc_snapshot = admin_users_doc.get()
         
-        # Prepare update data
-        update_data = {}
-        updated = False
+        if not doc_snapshot.exists:
+            return None  # No users document exists
         
-        # Update role if provided
-        if request.role is not None:
-            update_data["role"] = request.role.value
-            user_data["role"] = request.role.value
-            updated = True
-            
-        # Update zone if provided (no validation - users have freedom)
-        if request.zone is not None:
-            update_data["zone"] = request.zone
-            user_data["zone"] = request.zone
-            updated = True
-            
-        # Update lastModified if any changes were made
-        if updated:
-            now = datetime.utcnow()
-            update_data["lastModified"] = now
-            update_data["updatedAt"] = firestore.SERVER_TIMESTAMP
-            user_data["lastModified"] = now
-            
-            # Update the document
-            user_doc.reference.update(update_data)
+        users_data = doc_snapshot.to_dict()
+        users_list = users_data.get("users", [])
+        
+        # Find the user to update
+        user_found = False
+        for i, user in enumerate(users_list):
+            if user.get("email") == request.email:
+                user_found = True
+                updated = False
+                
+                # Update role if provided
+                if request.role is not None:
+                    users_list[i]["role"] = request.role.value
+                    updated = True
+                    
+                # Update zone if provided (no validation - users have freedom)
+                if request.zone is not None:
+                    users_list[i]["zone"] = request.zone
+                    updated = True
+                    
+                # Update lastModified if any changes were made
+                if updated:
+                    now = datetime.utcnow()
+                    users_list[i]["lastModified"] = now
+                    users_list[i]["updatedAt"] = now  # Use actual datetime instead of SERVER_TIMESTAMP
+                    
+                    # Update the admin_users document
+                    admin_users_doc.set({
+                        "users": users_list,
+                        "lastUpdated": firestore.SERVER_TIMESTAMP,
+                        "totalUsers": len(users_list)
+                    })
+                
+                return UserResponse(
+                    email=users_list[i]["email"],
+                    role=UserRole(users_list[i]["role"]),
+                    zone=users_list[i]["zone"],
+                    createdDate=users_list[i]["createdDate"],
+                    lastModified=users_list[i]["lastModified"]
+                )
+        
+        return None  # User not found
             
         return UserResponse(
             email=user_data["email"],
