@@ -5,12 +5,14 @@ A robust FastAPI backend for managing land plots and economic zones with JWT-bas
 ## 🚀 Features
 
 - **JWT Authentication** with role-based permissions
-- **Plot Management** (create, update, release, query)
-- **Zone Master Data** management
+- **Plot Management** (create, update, release, query) with country-specific collections
+- **Zone Master Data** management using configurable collections
 - **Role-Based Access Control** (super_admin, zone_admin, normal_user)
+- **Flexible Zone Management** - No hardcoded zone restrictions, users have complete freedom
+- **Configurable Collections** - Database collection names managed via environment settings
 - **Auto-Generated API Documentation** (Swagger UI & ReDoc)
 - **Input Validation** with Pydantic schemas
-- **Mock Data Support** for development (Firestore ready)
+- **Firestore Integration** with Firebase Admin SDK
 
 ## 📋 Table of Contents
 
@@ -45,6 +47,12 @@ pip install -r requirements.txt
 # Setup environment variables
 cp .env.example .env
 
+# Configure Firebase credentials (place your firebase-service-account.json in project root)
+# The system supports multiple credential methods:
+# 1. Service account JSON file (firebase-service-account.json)
+# 2. Environment variable (GOOGLE_APPLICATION_CREDENTIALS)
+# 3. JSON string in environment (FIREBASE_SERVICE_ACCOUNT_JSON)
+
 # Run the development server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -72,16 +80,45 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### User Management
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/api/v1/users/create_user` | Create new user | Super admin only |
-| PUT | `/api/v1/users/update_user` | Update user role/zone | Super admin only |
-| GET | `/api/v1/users/list_users` | List all users | Super admin only |
+| POST | `/api/v1/users/create_user` | Create new user in admin-access collection | Super admin only |
+| PUT | `/api/v1/users/update_user` | Update user role/zone in admin-access collection | Super admin only |
 
 ### Zone Management
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/api/v1/country/zones` | Create zone master data | Write zones |
+| POST | `/api/v1/country/zones` | Create zone master data in zone-master collection | Write zones |
 
-## 🔐 Authentication & Permissions
+## �️ Database Architecture
+
+### Firestore Collections
+The application uses configurable Firestore collections managed via environment settings:
+
+| Collection | Environment Variable | Default Value | Purpose |
+|------------|---------------------|---------------|---------|
+| User Management | `FIRESTORE_COLLECTION_USERS` | `admin-access` | Store user accounts with roles and zones |
+| Zone Master Data | `FIRESTORE_COLLECTION_ZONES` | `zone-master` | Store economic zone definitions |
+| Plot Data | Dynamic Collections | `{country}-plots` | Country-specific plot collections (e.g., `gabon-plots`, `nigeria-plots`) |
+
+### Collection Design Principles
+- **No Hardcoded Names**: All collection names are configured via environment variables
+- **Country-Specific Plots**: Each country has its own plot collection for data isolation
+- **Unified User Management**: All users stored in single `admin-access` collection regardless of role
+- **Configurable Architecture**: Easy to change collection names for different environments
+
+### Plot Collection Mapping
+```
+gabon → gabon-plots
+nigeria → nigeria-plots  
+ghana → ghana-plots
+benin → benin-plots
+togo → togo-plots
+rwanda → rwanda-plots
+drc → drc-plots
+roc → roc-plots
+tanzania → tanzania-plots
+```
+
+## �🔐 Authentication & Permissions
 
 ### JWT Implementation Details
 - **Algorithm**: HS256 (HMAC with SHA-256) - symmetric key encryption
@@ -97,11 +134,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Current setup is development-friendly but requires security hardening for production
 
 ### User Storage & Management
-- **Current Storage**: In-memory dictionary (development only)
-- **User Creation**: Only `super_admin` can create users
-- **User Updates**: Only `super_admin` can modify user roles/zones
+- **Current Storage**: Firestore `admin-access` collection (production ready)
+- **User Creation**: Only `super_admin` can create users - creates new documents in admin-access
+- **User Updates**: Only `super_admin` can modify user roles/zones - updates existing documents by email
+- **Zone Freedom**: No zone validation restrictions - users can specify any zone name or country
+- **Collection Configuration**: All collection names are configurable via environment settings
 - **Access Control**: Role-based permissions with zone restrictions for `zone_admin`
-- **Production Note**: Replace with Firestore for persistent user storage
 
 ### User Roles
 - **super_admin**: Full access to all zones and operations
@@ -213,17 +251,18 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```json
 {
   "country": "Gabon",
-  "zoneCode": "GSEZ",
-  "plotName": "GSEZ-R-001",
+  "plotName": "C-4G  TEMPORARY",
   "plotStatus": "available"
 }
 ```
+**Note**: `zoneCode` is optional - the system will look up the plot by country and plotName.
 
 **Response:**
 ```json
 {
   "message": "Plot released successfully",
-  "plotName": "GSEZ-R-001",
+  "plotName": "C-4G  TEMPORARY",
+  "zoneCode": "GSEZ",
   "status": "available"
 }
 ```
@@ -315,12 +354,25 @@ arise_fastapi/
 ### Environment Variables
 Copy `.env.example` to `.env` and configure:
 
+#### Authentication Settings
 - **JWT_SECRET_KEY**: Secret key for JWT signing (HS256 symmetric encryption)
 - **JWT_ALGORITHM**: JWT algorithm (HS256 - HMAC with SHA-256)
 - **JWT_EXPIRE_HOURS**: Token expiry (24 hours)
+- **AUTH_SECRET_KEY**: Secret key for token generation endpoint
+
+#### Firebase Configuration
 - **FIREBASE_PROJECT_ID**: Firebase project ID
+- **FIREBASE_CREDENTIALS_PATH**: Path to Firebase service account JSON file
+
+#### Database Collection Settings
+- **FIRESTORE_COLLECTION_USERS**: User management collection (default: `admin-access`)
+- **FIRESTORE_COLLECTION_ZONES**: Zone master data collection (default: `zone-master`)  
+- **FIRESTORE_COLLECTION_PLOTS**: Base plots collection (default: `plots`)
+
+#### Application Settings
 - **APP_NAME**: Application name
 - **DEBUG**: Debug mode (True/False)
+- **ENVIRONMENT**: Environment name (development/production)
 
 **Security Note**: The current implementation uses HS256 (symmetric key) for development. For production, consider RS256 (asymmetric key) for enhanced security.
 
@@ -385,57 +437,84 @@ pytest --cov=app tests/
 
 ## 🔮 Future Roadmap
 
-### Phase 1: Database Integration
-- [ ] Replace mock data with real Firestore integration
+### Phase 1: Security & Performance Enhancements
+- [ ] Add rate limiting and request throttling
+- [ ] Implement refresh tokens for enhanced security
+- [ ] Add comprehensive logging and monitoring
+- [ ] Performance optimization for large datasets
 - [ ] Add database connection pooling
-- [ ] Implement data persistence
 
 ### Phase 2: API Enhancements
-- [ ] Unify PUT/PATCH endpoints for plot updates
+- [ ] Complete plot release endpoint optimization
 - [ ] Add bulk operations support
 - [ ] Implement pagination for large datasets
-- [ ] Add search and filtering capabilities
+- [ ] Add advanced search and filtering capabilities
+- [ ] Enhanced zone management features
 
-### Phase 3: Security & Performance
-- [ ] Add rate limiting
-- [ ] Implement refresh tokens
-- [ ] Add request logging and monitoring
-- [ ] Performance optimization
-
-### Phase 4: Additional Features
-- [ ] Email notifications
-- [ ] File upload support
-- [ ] Advanced reporting
+### Phase 3: Additional Features
+- [ ] Email notifications for plot allocations
+- [ ] File upload support for documents
+- [ ] Advanced reporting and analytics
 - [ ] Multi-language support
+- [ ] Audit logging for all operations
 
-### Phase 5: Deployment & DevOps
+### Phase 4: Deployment & DevOps
 - [ ] Docker containerization
 - [ ] AWS Lambda deployment
 - [ ] CI/CD pipeline setup
 - [ ] Infrastructure as Code (Terraform)
 - [ ] Monitoring and alerting
+- [ ] Load balancing and scaling
 
 ## 📊 Current Implementation Status
 
 ### ✅ Completed Features
-- JWT-based authentication system
-- Role-based access control
-- Plot CRUD operations
-- Zone management
+- JWT-based authentication system with configurable secrets
+- Role-based access control with flexible zone management
+- Plot CRUD operations with country-specific collections
+- Zone management with configurable collection names
+- User management with admin-access collection
 - API documentation (Swagger/ReDoc)
-- Request/response validation
-- Error handling
-- Mock data service
+- Request/response validation with Pydantic
+- Error handling with detailed responses
+- Firebase/Firestore integration with service account authentication
+- Configurable database collections (no hardcoded names)
+- Flexible zone validation (users have complete freedom)
+- Dynamic plot collection selection based on country
 
 ### 🔄 In Progress
-- Database integration planning
-- Deployment strategy
+- Plot release endpoint debugging (zoneCode optional functionality)
+- Enhanced error handling and debugging capabilities
 
 ### 📋 Pending
-- Real Firestore integration
-- Production deployment
+- Production security hardening
 - Comprehensive testing suite
 - Performance optimization
+- Rate limiting implementation
+
+## 🔧 Configuration Management
+
+### Collection Name Configuration
+All Firestore collection names are configurable via environment variables, ensuring flexibility across different environments:
+
+```python
+# In app/core/config.py
+FIRESTORE_COLLECTION_USERS: str = "admin-access"      # User management
+FIRESTORE_COLLECTION_ZONES: str = "zone-master"       # Zone definitions  
+FIRESTORE_COLLECTION_PLOTS: str = "plots"             # Base plots collection
+```
+
+### Benefits of Configurable Collections
+- **Environment Flexibility**: Different collection names for dev/staging/production
+- **No Hardcoding**: All collection references use configuration settings
+- **Easy Maintenance**: Single point of configuration change
+- **Multi-tenant Support**: Different organizations can use different collection names
+
+### Zone Management Freedom
+- **No Zone Validation**: Users can specify any zone name or country
+- **Dynamic Zone Creation**: Zones are created as needed, no predefined list
+- **Flexible Naming**: Support for both zone codes (GSEZ) and country names (Nigeria)
+- **User Freedom**: Complete flexibility in zone naming conventions
 
 ## 🤝 Contributing
 
