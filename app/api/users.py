@@ -3,7 +3,6 @@ User management API endpoints.
 Requires super_admin role for all operations.
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List
 
 from app.schemas.auth import (
     CreateUserRequest, 
@@ -183,50 +182,3 @@ async def update_user(
         )
 
 
-@router.get(
-    "/list_user",
-    response_model=List[UserResponse],
-    responses={
-        401: {"model": AuthErrorResponse, "description": "Unauthorized - Invalid or missing token"},
-        403: {"model": AuthErrorResponse, "description": "Forbidden - Insufficient permissions"},
-        500: {"model": AuthErrorResponse, "description": "Internal Server Error"}
-    },
-    summary="List All Users",
-    description="List all users in the system. Only accessible by super_admin."
-)
-async def list_user(
-    current_user: JWTPayload = Depends(require_permissions(["read"], ["users"]))
-):
-    """
-    List all users (super_admin only).
-    
-    **Requirements:**
-    - JWT token with super_admin role
-    
-    **Returns:**
-    - List of all users with their details
-    """
-    # Additional check: only super_admin can list users
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error_code": "INSUFFICIENT_PERMISSIONS",
-                "message": "Only super_admin can list users",
-                "details": {"required_role": "super_admin", "current_role": current_user.role}
-            }
-        )
-    
-    try:
-        users = auth_service.list_users()
-        return users
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_code": "INTERNAL_ERROR",
-                "message": "Failed to list users",
-                "details": {"error": str(e)}
-            }
-        )

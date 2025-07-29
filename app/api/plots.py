@@ -220,7 +220,7 @@ async def update_plot(
 
 
 @router.patch(
-    "/release-plot", 
+    "/update-plot", 
     response_model=PlotReleaseResponse,
     status_code=status.HTTP_200_OK,
     responses={
@@ -228,33 +228,33 @@ async def update_plot(
         403: {"description": "Forbidden - Insufficient permissions"},
         404: {"description": "Plot not found"}
     },
-    summary="Release Plot",
+    summary="Update Plot Status",
     description="""
-    Release a plot by setting status to available and clearing allocation data.
+    Update plot status with minimal request data.
     
-    **Logic**: Partial resource update (PATCH semantics) for plot release.
-    Different from PUT /update-plot - only changes status and clears business data.
+    **Logic**: Partial resource update (PATCH semantics) for plot status changes.
+    Different from PUT /update-plot - only changes status, doesn't update all business details.
     
-    **Why PATCH vs PUT?**:
-    - PATCH: Partial update - only changes plot status to available
+    **Status Options**:
+    - PATCH: Updates only plot status - can be 'Available' or 'Occupied'
     - PUT: Complete update - updates full business allocation details
     - Different business logic and validation requirements
     
     **Role-Based Access**:
     - Requires 'write' permission for plots  
-    - Zone admins can only release plots in their assigned zone
-    - Super admins can release plots in any zone
+    - Zone admins can only update plots in their assigned zone
+    - Super admins can update plots in any zone
     """
 )
-async def release_plot(
+async def update_plot_status(
     request: PlotReleaseRequest,
     user: JWTPayload = Depends(require_plots_write)
 ) -> PlotReleaseResponse:
     """
-    Release a plot by setting status to available.
+    Update plot status with minimal request data.
     
     Args:
-        request: Plot release request with minimal required fields
+        request: Plot status update request with minimal required fields
         user: Authenticated user (injected by dependency)
         
     Returns:

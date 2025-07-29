@@ -19,7 +19,7 @@ class PlotCategory(str, Enum):
 class PlotStatus(str, Enum):
     """Valid plot status values as per API specification."""
     AVAILABLE = "Available"
-    ALLOCATED = "Allocated"
+    OCCUPIED = "Occupied"
     RESERVED = "Reserved"
 
 
@@ -32,7 +32,7 @@ class PlotResponse(BaseModel):
     - Matches the format specified in flowchart
     """
     plotName: str = Field(..., max_length=50, description="Unique plot identifier")
-    plotStatus: PlotStatus = Field(..., description="Available, Allocated, Reserved")
+    plotStatus: PlotStatus = Field(..., description="Available, Occupied, Reserved")
     category: PlotCategory = Field(..., description="Residential, Commercial, Industrial")
     phase: int = Field(..., description="Phase number")
     areaInSqm: Decimal = Field(..., description="Area in square meters")
@@ -166,21 +166,22 @@ class PlotUpdateResponse(BaseModel):
 
 class PlotReleaseRequest(BaseModel):
     """
-    Request schema for PATCH /release-plot endpoint.
+    Request schema for PATCH /update-plot endpoint.
     
-    Logic: Minimal request for releasing a plot back to available status.
-    Different from PUT because it only changes status, doesn't update business details.
+    Logic: Minimal request for updating plot status.
+    Can set status to either 'Available' or 'Occupied'.
     """
     country: str = Field(..., max_length=50, description="Country name")
     zoneCode: Optional[str] = Field(None, max_length=10, description="Zone code (optional - will be looked up)")
     plotName: str = Field(..., max_length=50, description="Plot identifier")
-    plotStatus: str = Field(..., description="Must be 'available'")
+    plotStatus: str = Field(..., description="Plot status: 'Available' or 'Occupied'")
 
     @validator('plotStatus')
     def validate_plot_status(cls, v):
-        if v.lower() != 'available':
-            raise ValueError('Plot status must be "available" for release operation')
-        return v.lower()
+        valid_statuses = ['available', 'occupied']
+        if v.lower() not in valid_statuses:
+            raise ValueError('Plot status must be either "Available" or "Occupied"')
+        return v.title()  # Convert to title case (Available/Occupied)
 
     @validator('zoneCode')
     def validate_zone_code(cls, v):
@@ -193,7 +194,7 @@ class PlotReleaseRequest(BaseModel):
             "example": {
                 "country": "Gabon",
                 "plotName": "C-4G  TEMPORARY", 
-                "plotStatus": "available"
+                "plotStatus": "Available"
             }
         }
 

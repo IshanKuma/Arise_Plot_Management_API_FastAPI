@@ -264,17 +264,18 @@ class FirestoreService:
 
     async def release_plot(self, request: PlotReleaseRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
         """
-        Release a plot by setting status to available and clearing allocation data using dynamic collections.
+        Update plot status to Available or Occupied using dynamic collections.
         
         Logic:
         - Uses country-specific collection based on request.country
-        - Different from update_plot - only changes status (PATCH semantics)
-        - Clears all business allocation fields
-        - Zone admin can only release plots in their zone
+        - Different from update_plot - only changes status and allocation data (PATCH semantics)
+        - If status is set to Available, clears all business allocation fields
+        - If status is set to Occupied, keeps existing allocation data
+        - Zone admin can only update plots in their zone
         - If zoneCode not provided, looks up plot by country and plotName first
         
         Args:
-            request: Plot release request data
+            request: Plot status update request data
             user_zone: User's zone (for zone_admin access control)
             
         Returns:
@@ -288,6 +289,7 @@ class FirestoreService:
         collection_name = self.get_plot_collection_name(request.country)
         plots_collection = self.db.collection(collection_name)
         
+        print(f"🔍 Request received - Country: {request.country}, PlotName: {request.plotName}, PlotStatus: {request.plotStatus}")
         print(f"🔍 Searching for plot in collection: {collection_name}")
         print(f"🔍 Search criteria - Country: {request.country}, PlotName: {request.plotName}, ZoneCode: {request.zoneCode}")
         
@@ -333,26 +335,37 @@ class FirestoreService:
         if user_zone and user_zone != actual_zone_code:
             raise PermissionError("Access denied: plot not in your assigned zone")
         
-        # Release the plot - clear allocation data
-        release_data = {
-            "plotStatus": "Available",
-            "companyName": None,
-            "allocatedDate": None,
-            "expiryDate": None,
-            "investmentAmount": None,
-            "employmentGenerated": None,
-            "activity": None,
+        # Update the plot with the requested status
+        update_data = {
+            "plotStatus": request.plotStatus,  # Use the status from the request (already a string)
             "updatedAt": firestore.SERVER_TIMESTAMP
         }
         
+        # If setting to Available, clear allocation data
+        if request.plotStatus.lower() == "available":
+            update_data.update({
+                "companyName": None,
+                "allocatedDate": None,
+                "expiryDate": None,
+                "investmentAmount": None,
+                "employmentGenerated": None,
+                "activity": None
+            })
+        
         # Update the document
-        plot_doc.reference.update(release_data)
+        try:
+            print(f"🔄 Updating plot with data: {update_data}")
+            plot_doc.reference.update(update_data)
+            print(f"✅ Plot updated successfully")
+        except Exception as e:
+            print(f"❌ Error updating plot: {e}")
+            raise
         
         return {
-            "message": "Plot released successfully",
+            "message": f"Plot status updated to {request.plotStatus} successfully",
             "plotName": request.plotName,
             "zoneCode": actual_zone_code,
-            "status": "available"
+            "status": request.plotStatus.lower()
         }
 
     async def create_zone(self, request: ZoneCreateRequest) -> Dict[str, Any]:
