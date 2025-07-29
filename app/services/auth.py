@@ -169,10 +169,8 @@ class AuthService:
             "email": request.email,
             "role": request.role.value,
             "zone": request.zone,
-            "createdDate": now,
-            "lastModified": now,
-            "createdAt": now,  # Use actual datetime instead of SERVER_TIMESTAMP
-            "updatedAt": now   # Use actual datetime instead of SERVER_TIMESTAMP
+            "createdAt": now,  # Single creation timestamp
+            "updatedAt": now   # Single update timestamp
         }
         
         # Add new user to the list
@@ -189,8 +187,8 @@ class AuthService:
             email=new_user["email"],
             role=UserRole(new_user["role"]),
             zone=new_user["zone"],
-            createdDate=new_user["createdDate"],
-            lastModified=new_user["lastModified"]
+            createdAt=new_user["createdAt"],
+            updatedAt=new_user["updatedAt"]
         )
     
     def update_user(self, request: UpdateUserRequest) -> Optional[UserResponse]:
@@ -232,11 +230,10 @@ class AuthService:
                     users_list[i]["zone"] = request.zone
                     updated = True
                     
-                # Update lastModified if any changes were made
+                # Update timestamp if any changes were made
                 if updated:
                     now = datetime.utcnow()
-                    users_list[i]["lastModified"] = now
-                    users_list[i]["updatedAt"] = now  # Use actual datetime instead of SERVER_TIMESTAMP
+                    users_list[i]["updatedAt"] = now
                     
                     # Update the admin_users document
                     admin_users_doc.set({
@@ -249,19 +246,11 @@ class AuthService:
                     email=users_list[i]["email"],
                     role=UserRole(users_list[i]["role"]),
                     zone=users_list[i]["zone"],
-                    createdDate=users_list[i]["createdDate"],
-                    lastModified=users_list[i]["lastModified"]
+                    createdAt=users_list[i]["createdAt"],
+                    updatedAt=users_list[i]["updatedAt"]
                 )
         
         return None  # User not found
-            
-        return UserResponse(
-            email=user_data["email"],
-            role=UserRole(user_data["role"]),
-            zone=user_data["zone"],
-            createdDate=user_data["createdDate"],
-            lastModified=user_data["lastModified"]
-        )
     
     def get_user_by_email(self, email: str) -> Optional[UserModel]:
         """
@@ -285,28 +274,37 @@ class AuthService:
             email=user_data["email"],
             role=UserRole(user_data["role"]),
             zone=user_data["zone"],
-            createdDate=user_data["createdDate"],
-            lastModified=user_data["lastModified"]
+            createdAt=user_data["createdAt"],
+            updatedAt=user_data["updatedAt"]
         )
     
     def list_users(self) -> List[UserResponse]:
         """
-        List all users from Firestore.
+        List all users from Firestore admin-access collection under 'admin_users' document.
         
         Returns:
             List[UserResponse]: List of all users
         """
-        docs = self.users_collection.stream()
+        # Reference the specific 'admin_users' document
+        admin_users_doc = self.users_collection.document("admin_users")
+        
+        # Get current users data
+        doc_snapshot = admin_users_doc.get()
+        
+        if not doc_snapshot.exists:
+            return []  # No users document exists
+        
+        users_data = doc_snapshot.to_dict()
+        users_list = users_data.get("users", [])
         users = []
         
-        for doc in docs:
-            user_data = doc.to_dict()
+        for user_data in users_list:
             users.append(UserResponse(
                 email=user_data["email"],
                 role=UserRole(user_data["role"]),
                 zone=user_data["zone"],
-                createdDate=user_data["createdDate"],
-                lastModified=user_data["lastModified"]
+                createdAt=user_data["createdAt"],
+                updatedAt=user_data["updatedAt"]
             ))
         
         return users

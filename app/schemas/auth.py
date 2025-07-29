@@ -213,8 +213,8 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="User email address")
     role: UserRole = Field(..., description="User role")
     zone: str = Field(..., description="User zone")
-    createdDate: datetime = Field(..., description="User creation timestamp")
-    lastModified: datetime = Field(..., description="Last modification timestamp")
+    createdAt: datetime = Field(..., description="User creation timestamp")
+    updatedAt: datetime = Field(..., description="Last modification timestamp")
     
     class Config:
         """Pydantic configuration."""
@@ -226,8 +226,8 @@ class UserResponse(BaseModel):
                 "email": "user@example.com",
                 "role": "zone_admin",
                 "zone": "GSEZ",
-                "createdDate": "2024-01-01T10:00:00Z",
-                "lastModified": "2024-01-01T10:00:00Z"
+                "createdAt": "2024-01-01T10:00:00Z",
+                "updatedAt": "2024-01-01T10:00:00Z"
             }
         }
 
@@ -239,8 +239,8 @@ class UserModel(BaseModel):
     email: str
     role: UserRole
     zone: str
-    createdDate: datetime
-    lastModified: datetime
+    createdAt: datetime
+    updatedAt: datetime
     
     class Config:
         """Pydantic configuration."""

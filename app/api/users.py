@@ -15,7 +15,7 @@ from app.schemas.auth import (
 from app.services.auth import auth_service
 from app.utils.auth import require_permissions
 
-router = APIRouter(prefix="/users", tags=["User Management"])
+router = APIRouter(prefix="/user", tags=["User Management"])
 
 
 @router.post(
@@ -184,7 +184,7 @@ async def update_user(
 
 
 @router.get(
-    "/list_users",
+    "/list_user",
     response_model=List[UserResponse],
     responses={
         401: {"model": AuthErrorResponse, "description": "Unauthorized - Invalid or missing token"},
@@ -194,7 +194,7 @@ async def update_user(
     summary="List All Users",
     description="List all users in the system. Only accessible by super_admin."
 )
-async def list_users(
+async def list_user(
     current_user: JWTPayload = Depends(require_permissions(["read"], ["users"]))
 ):
     """

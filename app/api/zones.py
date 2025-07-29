@@ -13,7 +13,7 @@ router = APIRouter(prefix="/country", tags=["Zones"])
 
 
 @router.post(
-    "/zones",
+    "/zone",
     response_model=ZoneCreateResponse,
     status_code=status.HTTP_200_OK,
     responses={

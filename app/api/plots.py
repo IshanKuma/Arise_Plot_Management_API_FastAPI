@@ -14,7 +14,7 @@ from app.schemas.auth import JWTPayload
 from app.utils.auth import require_plots_read, require_plots_write
 from app.services.firestore import firestore_service
 
-router = APIRouter(prefix="/plots", tags=["Plots"])
+router = APIRouter(prefix="/plot", tags=["Plots"])
 # Use the singleton firestore_service instance
 
 
@@ -295,7 +295,7 @@ async def release_plot(
 
 
 @router.get(
-    "/plot-details",
+    "/plot-detail",
     response_model=PlotDetailsResponse,
     status_code=status.HTTP_200_OK,
     responses={
