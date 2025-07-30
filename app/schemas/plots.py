@@ -56,14 +56,24 @@ class PlotResponse(BaseModel):
         }
 
 
+class PaginationMeta(BaseModel):
+    """Pagination metadata for paginated responses."""
+    limit: int = Field(..., description="Items per page")
+    hasNextPage: bool = Field(..., description="Whether there are more items")
+    nextCursor: Optional[str] = Field(None, description="Cursor for next page (if hasNextPage is true)")
+    totalReturned: int = Field(..., description="Number of items in current response")
+
+
 class AvailablePlotsResponse(BaseModel):
     """
     Response schema for GET /plots/available endpoint.
     
     As per API specification:
     - plots: array of plot objects, mandatory
+    - pagination: metadata for cursor-based pagination
     """
     plots: List[PlotResponse] = Field(..., description="Array of plot objects")
+    pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
     class Config:
         """Pydantic configuration."""
@@ -79,18 +89,14 @@ class AvailablePlotsResponse(BaseModel):
                         "areaInHa": 0.10,
                         "zoneCode": "GSEZ",
                         "country": "Gabon"
-                    },
-                    {
-                        "plotName": "GSEZ-COM-002", 
-                        "plotStatus": "Available",
-                        "category": "Commercial",
-                        "phase": 2,
-                        "areaInSqm": 2500.50,
-                        "areaInHa": 0.25,
-                        "zoneCode": "GSEZ",
-                        "country": "Gabon"
                     }
-                ]
+                ],
+                "pagination": {
+                    "limit": 50,
+                    "hasNextPage": True,
+                    "nextCursor": "plot_doc_id_456",
+                    "totalReturned": 50
+                }
             }
         }
 
@@ -102,12 +108,17 @@ class PlotQueryParams(BaseModel):
     As per API specification:
     - All parameters are optional
     - Used for filtering plots
+    - Pagination parameters added for performance optimization
     """
     country: Optional[str] = Field(None, max_length=50, description="Filter by country name")
     zoneCode: Optional[str] = Field(None, max_length=10, description="Filter by zone code")
     category: Optional[PlotCategory] = Field(None, description="Filter by plot category")
     phase: Optional[int] = Field(None, ge=1, description="Filter by phase number (positive integer)")
-
+    
+    # Pagination parameters
+    limit: Optional[int] = Field(50, ge=1, le=100, description="Number of items per page (1-100, default: 50)")
+    cursor: Optional[str] = Field(None, description="Cursor for pagination (document ID from previous page)")
+    
     @validator('zoneCode')
     def validate_zone_code(cls, v):
         """Validate zone code format if provided."""
@@ -122,7 +133,9 @@ class PlotQueryParams(BaseModel):
                 "country": "Gabon",
                 "zoneCode": "GSEZ", 
                 "category": "Residential",
-                "phase": 2
+                "phase": 2,
+                "limit": 50,
+                "cursor": "plot_doc_id_123"
             }
         }
 
@@ -277,10 +290,14 @@ class PlotDetailsQueryParams(BaseModel):
     """
     Query parameters for GET /plot-details endpoint.
     
-    Logic: Simple country and zone filter for detailed plot information.
+    Logic: Country and zone filter with pagination for detailed plot information.
     """
     country: str = Field(..., max_length=50, description="Country name")
     zoneCode: str = Field(..., max_length=10, description="Zone code")
+    
+    # Pagination parameters
+    limit: Optional[int] = Field(50, ge=1, le=100, description="Number of items per page (1-100, default: 50)")
+    cursor: Optional[str] = Field(None, description="Cursor for pagination (document ID from previous page)")
 
     @validator('zoneCode')
     def validate_zone_code(cls, v):
@@ -290,9 +307,10 @@ class PlotDetailsQueryParams(BaseModel):
 
 
 class PlotDetailsResponse(BaseModel):
-    """Response schema for GET /plot-details endpoint."""
+    """Response schema for GET /plot-details endpoint with pagination."""
     metadata: PlotDetailsMetadata
     plots: List[PlotDetailsItem]
+    pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
     class Config:
         schema_extra = {
@@ -316,6 +334,12 @@ class PlotDetailsResponse(BaseModel):
                         "investmentAmount": None,
                         "employmentGenerated": None
                     }
-                ]
+                ],
+                "pagination": {
+                    "limit": 50,
+                    "hasNextPage": False,
+                    "nextCursor": None,
+                    "totalReturned": 10
+                }
             }
         }

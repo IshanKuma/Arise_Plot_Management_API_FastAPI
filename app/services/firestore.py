@@ -2,6 +2,7 @@
 Firestore database service for plot and zone data management.
 Real Firestore integration - replaces mock data.
 """
+import re
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
 from datetime import datetime, date
@@ -11,7 +12,8 @@ from app.core.config import settings
 from app.schemas.plots import (
     PlotResponse, PlotQueryParams, PlotCategory, PlotStatus,
     PlotUpdateRequest, PlotReleaseRequest, ZoneCreateRequest,
-    PlotDetailsQueryParams, PlotDetailsResponse, PlotDetailsMetadata, PlotDetailsItem
+    PlotDetailsQueryParams, PlotDetailsResponse, PlotDetailsMetadata, PlotDetailsItem,
+    PaginationMeta
 )
 
 
@@ -85,35 +87,69 @@ class FirestoreService:
         query_params: PlotQueryParams,
         user_zone: Optional[str] = None,
         is_zone_admin: bool = False
-    ) -> List[PlotResponse]:
+    ) -> tuple[List[PlotResponse], dict]:
         """
-        Query plots from Firestore with filtering and role-based access using dynamic collections.
+        Query plots from Firestore with cursor-based pagination and filtering.
         
-        Updated to handle actual Firestore data structure:
-        - Data is nested under 'details' field
-        - plotStatus filtering for available plots only
-        - Proper field mapping from Firestore to API response
+        Performance Optimizations:
+        - Uses Firebase limit() for controlled batch sizes (default: 50)
+        - Implements cursor-based pagination with startAfter() for efficient navigation
+        - Reduces database read costs and improves response times
+        - Orders by document ID for consistent pagination
         
         Args:
-            query_params: Query filters from request
+            query_params: Query filters and pagination parameters
             user_zone: User's assigned zone (for zone_admin filtering)
             is_zone_admin: Whether user is zone_admin (affects filtering)
             
         Returns:
-            List[PlotResponse]: Filtered list of available plots
+            tuple: (plots_list, pagination_metadata)
         """
         
-        # Step 1: Determine target collection based on country parameter
+        # Step 1: Determine target collection
         if query_params.country:
-            # Use country-specific collection based on the provided country
             collection_name = self.get_plot_collection_name(query_params.country)
             plots_collection = self.db.collection(collection_name)
         else:
-            # If no country specified, default to gabon-plots collection
             plots_collection = self.db.collection("gabon-plots")
         
-        # Step 2: Get all documents (no where clauses due to nested structure)
-        docs = list(plots_collection.stream())
+        # Step 2: Build Firebase query with pagination
+        # Order by document ID for consistent pagination
+        query = plots_collection.order_by('__name__')
+        
+        # Apply cursor pagination if provided
+        if query_params.cursor:
+            try:
+                # Get the document reference for cursor
+                cursor_doc = plots_collection.document(query_params.cursor).get()
+                if cursor_doc.exists:
+                    query = query.start_after(cursor_doc)
+            except Exception:
+                # If cursor is invalid, ignore it and start from beginning
+                pass
+        
+        # Apply limit (add 1 to check if there are more pages)
+        limit = query_params.limit or 50
+        query = query.limit(limit + 1)
+        
+        # Step 3: Execute query
+        docs = list(query.stream())
+        
+        # Step 4: Check if there are more pages
+        has_next_page = len(docs) > limit
+        if has_next_page:
+            docs = docs[:-1]  # Remove the extra document used for pagination check
+        
+        # Step 5: Prepare pagination metadata
+        next_cursor = docs[-1].id if docs and has_next_page else None
+        pagination_meta = {
+            "limit": limit,
+            "hasNextPage": has_next_page,
+            "nextCursor": next_cursor,
+            "totalReturned": 0  # Will be updated after filtering
+        }
+        
+        # Step 6: Process documents with client-side filtering
         plots = []
         
         for doc in docs:
@@ -121,53 +157,39 @@ class FirestoreService:
                 doc_data = doc.to_dict()
                 details = doc_data.get('details', {})
                 
-                # Step 3: Filter for available plots only
+                # Filter for available plots only
                 plot_status = details.get('plotStatus', '').strip()
-                
-                # Consider plots available if status is "Available" or empty string
                 if plot_status.lower() not in ['available', '']:
                     continue
                 
-                # Step 4: Extract and map fields from nested structure OR root level
-                # Check both root level and details for plot name
+                # Extract and map fields
                 plot_name = doc_data.get('name') or details.get('name', f"Plot-{doc.id}")
-                category_str = details.get('category', 'Industrial')  # Default to Industrial
+                category_str = details.get('category', 'Industrial')
                 area_sqm = self._parse_area(details.get('areaInSqm', '0'))
                 area_ha = self._parse_area(details.get('areaInHa', '0'))
                 
-                # If area_ha is 0 but area_sqm exists, calculate hectares
                 if area_ha == 0.0 and area_sqm > 0:
-                    area_ha = area_sqm / 10000  # Convert sqm to hectares
+                    area_ha = area_sqm / 10000
                 
-                # Map category to valid enum value
+                # Map category
                 category_mapping = {
                     'residential': 'Residential',
                     'commercial': 'Commercial', 
                     'industrial': 'Industrial',
-                    'facility/utility': 'Industrial',  # Map facility to Industrial
-                    '': 'Industrial'  # Default empty to Industrial
+                    'facility/utility': 'Industrial',
+                    '': 'Industrial'
                 }
                 category = category_mapping.get(category_str.lower(), 'Industrial')
                 
-                # Step 5: Apply query parameter filters (client-side filtering)
-                # Filter by country if specified (assume collection name indicates country)
-                if query_params.country:
-                    expected_collection = self.get_plot_collection_name(query_params.country)
-                    if collection_name != expected_collection:
-                        continue
-                
-                # Filter by zoneCode if specified (would need zoneCode in data)
+                # Apply filters
                 if query_params.zoneCode:
-                    # Skip if zoneCode filtering requested but no zoneCode in data
                     doc_zone = details.get('zoneCode', '')
                     if doc_zone != query_params.zoneCode:
                         continue
                 
-                # Filter by category if specified
                 if query_params.category and query_params.category.value != category:
                     continue
                 
-                # Filter by phase if specified (would need phase in data)
                 if query_params.phase:
                     doc_phase = details.get('phase', 1)
                     try:
@@ -176,32 +198,34 @@ class FirestoreService:
                     except (ValueError, TypeError):
                         continue
                 
-                # Step 6: Apply role-based filtering
+                # Apply role-based filtering
                 if is_zone_admin and user_zone:
                     doc_zone = details.get('zoneCode', '')
                     if doc_zone != user_zone:
                         continue
                 
-                # Step 7: Create response object with mapped fields
+                # Create response object
                 plot_response = PlotResponse(
                     plotName=plot_name,
-                    plotStatus=PlotStatus.AVAILABLE,  # We only return available plots
+                    plotStatus=PlotStatus.AVAILABLE,
                     category=PlotCategory(category),
-                    phase=1,  # Default phase since not in current data structure
+                    phase=1,
                     areaInSqm=Decimal(str(area_sqm)),
                     areaInHa=Decimal(str(area_ha)),
-                    zoneCode=details.get('zoneCode', 'UNKNOWN'),  # Default if missing
-                    country=query_params.country or "Gabon"  # Use query param or default
+                    zoneCode=details.get('zoneCode', 'UNKNOWN'),
+                    country=query_params.country or "Gabon"
                 )
                 
                 plots.append(plot_response)
                 
             except Exception as e:
-                # Skip invalid documents and continue
-                print(f"⚠️ Skipping invalid plot document {doc.id}: {e}")
+                # Skip invalid documents
                 continue
         
-        return plots
+        # Update pagination metadata with actual returned count
+        pagination_meta["totalReturned"] = len(plots)
+        
+        return plots, pagination_meta
 
     async def update_plot(self, request: PlotUpdateRequest, user_zone: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -426,19 +450,19 @@ class FirestoreService:
 
     async def get_plot_details(self, params: PlotDetailsQueryParams, user_zone: Optional[str] = None) -> PlotDetailsResponse:
         """
-        Get simplified plot information for a specific country using actual database structure.
+        Get simplified plot information for a specific country with cursor-based pagination.
         
-        Logic:
-        - Uses country-specific collections (e.g., gabon-plots, benin-plots)
-        - Returns only essential plot fields without null-heavy data
-        - Handles nested 'details' objects in documents
+        Performance Optimizations:
+        - Uses Firebase limit() and startAfter() for efficient pagination
+        - Ordered by document ID for consistent pagination
+        - Default limit: 50 items per request
         
         Args:
-            params: Query parameters (country, zoneCode)
+            params: Query parameters (country, zoneCode, limit, cursor)
             user_zone: User's zone (for zone_admin access control)
             
         Returns:
-            PlotDetailsResponse: Simplified plot information with metadata
+            PlotDetailsResponse: Simplified plot information with metadata and pagination
             
         Raises:
             PermissionError: If zone access denied
@@ -452,8 +476,31 @@ class FirestoreService:
             collection_name = self.get_plot_collection_name(params.country)
             plots_collection = self.db.collection(collection_name)
             
-            # Get all plots for the country
-            docs = list(plots_collection.stream())
+            # Build Firebase query with pagination
+            query = plots_collection.order_by('__name__')
+            
+            # Apply cursor pagination if provided
+            if params.cursor:
+                try:
+                    cursor_doc = plots_collection.document(params.cursor).get()
+                    if cursor_doc.exists:
+                        query = query.start_after(cursor_doc)
+                except Exception:
+                    pass  # Invalid cursor, start from beginning
+            
+            # Apply limit (add 1 to check for next page)
+            limit = params.limit or 50
+            query = query.limit(limit + 1)
+            
+            # Execute query
+            docs = list(query.stream())
+            
+            # Check pagination
+            has_next_page = len(docs) > limit
+            if has_next_page:
+                docs = docs[:-1]
+            
+            next_cursor = docs[-1].id if docs and has_next_page else None
             
             # Process plot data with simplified logic
             plot_items = []
@@ -502,7 +549,15 @@ class FirestoreService:
                 availablePlots=available_count
             )
             
-            return PlotDetailsResponse(metadata=metadata, plots=plot_items)
+            # Create pagination metadata
+            pagination_meta = PaginationMeta(
+                limit=limit,
+                hasNextPage=has_next_page,
+                nextCursor=next_cursor,
+                totalReturned=len(plot_items)
+            )
+            
+            return PlotDetailsResponse(metadata=metadata, plots=plot_items, pagination=pagination_meta)
             
         except Exception as e:
             print(f"❌ Error in get_plot_details: {e}")

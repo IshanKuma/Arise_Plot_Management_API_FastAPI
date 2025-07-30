@@ -51,11 +51,18 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
     - `zoneCode`: Filter by zone code (4-6 uppercase letters)
     - `category`: Filter by plot category (Residential, Commercial, Industrial)
     - `phase`: Filter by phase number (positive integer)
+    - `limit`: Number of items per page (1-100, default: 50)
+    - `cursor`: Cursor for pagination (document ID from previous page)
     
     **Role-Based Access**:
     - All roles need 'read' permission for plots
     - Zone admins automatically filtered to their assigned zone
     - Super admins and normal users see all zones (unless filtered)
+    
+    **Performance Optimization**:
+    - Uses cursor-based pagination with Firebase limit() and startAfter()
+    - Default limit: 50 items per request for optimal performance
+    - Reduces database read costs and response times
     """
 )
 async def get_available_plots(
@@ -63,6 +70,8 @@ async def get_available_plots(
     zoneCode: Optional[str] = Query(None, max_length=10, description="Filter by zone code"),  
     category: Optional[str] = Query(None, description="Filter by category: Residential, Commercial, Industrial"),
     phase: Optional[int] = Query(None, ge=1, description="Filter by phase number"),
+    limit: int = Query(50, ge=1, le=100, description="Number of items per page (1-100)"),
+    cursor: Optional[str] = Query(None, description="Cursor for pagination (document ID from previous page)"),
     user: JWTPayload = Depends(require_plots_read)
 ) -> AvailablePlotsResponse:
     """
@@ -110,28 +119,32 @@ async def get_available_plots(
         from app.schemas.plots import PlotCategory
         category_enum = PlotCategory(category)
     
-    # Create query parameters object
+    # Create query parameters object with pagination
     query_params = PlotQueryParams(
         country=country,
         zoneCode=zoneCode,
         category=category_enum,
-        phase=phase
+        phase=phase,
+        limit=limit,
+        cursor=cursor
     )
     
     # Step 5: Apply Role-Based Filtering (as per flowchart)
     is_zone_admin = user.role == "zone_admin"
     user_zone = user.zone if is_zone_admin else None
     
-    # Step 6: Query Firestore Database
+    # Step 6: Query Firestore Database with pagination
     try:
-        plots = firestore_service.get_available_plots(
+        plots, pagination_meta = firestore_service.get_available_plots(
             query_params=query_params,
             user_zone=user_zone,
             is_zone_admin=is_zone_admin
         )
         
-        # Step 7: Format and Return Response
-        return AvailablePlotsResponse(plots=plots)
+        # Step 7: Format and Return Response with pagination
+        from app.schemas.plots import PaginationMeta
+        pagination = PaginationMeta(**pagination_meta)
+        return AvailablePlotsResponse(plots=plots, pagination=pagination)
         
     except Exception as e:
         raise HTTPException(
@@ -322,24 +335,28 @@ async def update_plot_status(
 async def get_plot_details(
     country: str = Query(..., max_length=50, description="Country name"),
     zoneCode: str = Query(..., max_length=10, description="Zone code"),
+    limit: int = Query(50, ge=1, le=100, description="Number of items per page (1-100)"),
+    cursor: Optional[str] = Query(None, description="Cursor for pagination (document ID from previous page)"),
     user: JWTPayload = Depends(require_plots_read)
 ) -> PlotDetailsResponse:
     """
-    Get detailed plot information for a specific zone.
+    Get detailed plot information for a specific zone with pagination.
     
     Args:
         country: Country name (required)
         zoneCode: Zone code (required)
+        limit: Number of items per page (1-100, default: 50)
+        cursor: Cursor for pagination (document ID from previous page)
         user: Authenticated user (injected by dependency)
         
     Returns:
-        PlotDetailsResponse: Detailed plot information with metadata
+        PlotDetailsResponse: Detailed plot information with metadata and pagination
         
     Raises:
         HTTPException: 403 if zone access denied
     """
     try:
-        params = PlotDetailsQueryParams(country=country, zoneCode=zoneCode)
+        params = PlotDetailsQueryParams(country=country, zoneCode=zoneCode, limit=limit, cursor=cursor)
         user_zone = user.zone if user.role == "zone_admin" else None
         result = await firestore_service.get_plot_details(params, user_zone)
         return result
@@ -348,7 +365,7 @@ async def get_plot_details(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
-                "error_code": "FORBIDDEN",
+                "error_code": "ACCESS_DENIED",
                 "message": str(e)
             }
         )
@@ -356,7 +373,8 @@ async def get_plot_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "error_code": "INTERNAL_ERROR",
-                "message": "An internal server error occurred"
+                "error_code": "INTERNAL_ERROR", 
+                "message": "Failed to retrieve plot details",
+                "details": {"error": str(e)}
             }
         )
