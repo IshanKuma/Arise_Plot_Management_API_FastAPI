@@ -101,6 +101,38 @@ class AvailablePlotsResponse(BaseModel):
         }
 
 
+class AvailablePlotsHeaderResponse(BaseModel):
+    """
+    Response schema for GET /plots/available endpoint with header-based pagination.
+    
+    Pagination metadata moved to response headers:
+    - X-Pagination-Limit: Items per page
+    - X-Pagination-Has-Next-Page: Whether there are more items  
+    - X-Pagination-Next-Cursor: Cursor for next page
+    - X-Pagination-Total-Returned: Number of items in current response
+    """
+    plots: List[PlotResponse] = Field(..., description="Array of plot objects")
+
+    class Config:
+        """Pydantic configuration."""
+        schema_extra = {
+            "example": {
+                "plots": [
+                    {
+                        "plotName": "GSEZ-RES-001",
+                        "plotStatus": "Available",
+                        "category": "Residential",
+                        "phase": 1,
+                        "areaInSqm": 1000.00,
+                        "areaInHa": 0.10,
+                        "zoneCode": "GSEZ",
+                        "country": "Gabon"
+                    }
+                ]
+            }
+        }
+
+
 class PlotQueryParams(BaseModel):
     """
     Query parameters for GET /plots/available endpoint.
@@ -341,5 +373,45 @@ class PlotDetailsResponse(BaseModel):
                     "nextCursor": None,
                     "totalReturned": 10
                 }
+            }
+        }
+
+
+class PlotDetailsHeaderResponse(BaseModel):
+    """
+    Response schema for GET /plot-details endpoint with header-based pagination.
+    
+    Pagination metadata moved to response headers:
+    - X-Pagination-Limit: Items per page
+    - X-Pagination-Has-Next-Page: Whether there are more items  
+    - X-Pagination-Next-Cursor: Cursor for next page
+    - X-Pagination-Total-Returned: Number of items in current response
+    """
+    metadata: PlotDetailsMetadata
+    plots: List[PlotDetailsItem]
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "metadata": {
+                    "country": "Gabon",
+                    "zoneCode": "GSEZ",
+                    "totalPlots": 10,
+                    "availablePlots": 7
+                },
+                "plots": [
+                    {
+                        "plotName": "GSEZ-R-001",
+                        "category": "Residential",
+                        "areaInHa": 0.5,
+                        "sector": "Housing",
+                        "activity": None,
+                        "plotStatus": "Available",
+                        "companyName": None,
+                        "allocatedDate": None,
+                        "investmentAmount": None,
+                        "employmentGenerated": None
+                    }
+                ]
             }
         }

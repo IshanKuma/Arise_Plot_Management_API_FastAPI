@@ -2,13 +2,13 @@
 Plots API routes for plot management operations.
 Implements all plot-related endpoints as per API specifications.
 """
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from typing import Optional
+from fastapi import APIRouter, Depends, Query, HTTPException, status, Response
+from typing import Optional, List
 from app.schemas.plots import (
-    AvailablePlotsResponse, PlotQueryParams,
+    PlotResponse, PlotQueryParams, AvailablePlotsHeaderResponse,
     PlotUpdateRequest, PlotUpdateResponse,
     PlotReleaseRequest, PlotReleaseResponse,
-    PlotDetailsQueryParams, PlotDetailsResponse
+    PlotDetailsQueryParams, PlotDetailsHeaderResponse, PlotDetailsItem
 )
 from app.schemas.auth import JWTPayload
 from app.utils.auth import require_plots_read, require_plots_write
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
 
 @router.get(
     "/available",
-    response_model=AvailablePlotsResponse,
+    response_model=AvailablePlotsHeaderResponse,
     status_code=status.HTTP_200_OK,
     responses={
         401: {
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
     },
     summary="Get Available Plots",
     description="""
-    Retrieve available plots with optional filtering.
+    Retrieve available plots with optional filtering and header-based pagination.
     
     **Flow 2: Available Plots Retrieval**
     
@@ -44,7 +44,7 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
        - `super_admin`/`normal_user`: Sees all plots (subject to query filters)
     4. **Query Filtering**: Apply optional filters (country, zoneCode, category, phase)
     5. **Firestore Query**: Retrieve matching plots from database
-    6. **Response Formatting**: Return structured plot data
+    6. **Response Formatting**: Return structured plot data with pagination in headers
     
     **Query Parameters** (all optional):
     - `country`: Filter by country name
@@ -53,6 +53,12 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
     - `phase`: Filter by phase number (positive integer)
     - `limit`: Number of items per page (1-100, default: 50)
     - `cursor`: Cursor for pagination (document ID from previous page)
+    
+    **Pagination Headers** (in response):
+    - `X-Pagination-Limit`: Number of items per page
+    - `X-Pagination-Has-Next-Page`: true/false if more pages exist
+    - `X-Pagination-Next-Cursor`: Document ID for next page (if hasNextPage is true)
+    - `X-Pagination-Total-Returned`: Number of items in current response
     
     **Role-Based Access**:
     - All roles need 'read' permission for plots
@@ -66,6 +72,7 @@ router = APIRouter(prefix="/plot", tags=["Plots"])
     """
 )
 async def get_available_plots(
+    response: Response,
     country: Optional[str] = Query(None, max_length=50, description="Filter by country name"),
     zoneCode: Optional[str] = Query(None, max_length=10, description="Filter by zone code"),  
     category: Optional[str] = Query(None, description="Filter by category: Residential, Commercial, Industrial"),
@@ -73,7 +80,7 @@ async def get_available_plots(
     limit: int = Query(50, ge=1, le=100, description="Number of items per page (1-100)"),
     cursor: Optional[str] = Query(None, description="Cursor for pagination (document ID from previous page)"),
     user: JWTPayload = Depends(require_plots_read)
-) -> AvailablePlotsResponse:
+) -> AvailablePlotsHeaderResponse:
     """
     Get available plots with filtering and role-based access control.
     
@@ -84,17 +91,20 @@ async def get_available_plots(
     4. Build Query Parameters
     5. Apply Role-Based Filtering
     6. Query Firestore Database
-    7. Format and Return Response
+    7. Format and Return Response with Header-Based Pagination
     
     Args:
+        response: FastAPI response object (for setting pagination headers)
         country: Optional country filter
         zoneCode: Optional zone code filter
         category: Optional category filter  
         phase: Optional phase filter
+        limit: Number of items per page (1-100, default: 50)
+        cursor: Cursor for pagination (document ID from previous page)
         user: Authenticated user (injected by dependency)
         
     Returns:
-        AvailablePlotsResponse: List of available plots
+        AvailablePlotsHeaderResponse: List of available plots (pagination in headers)
         
     Raises:
         HTTPException: 401/403 for auth errors (handled by dependencies)
@@ -141,10 +151,16 @@ async def get_available_plots(
             is_zone_admin=is_zone_admin
         )
         
-        # Step 7: Format and Return Response with pagination
-        from app.schemas.plots import PaginationMeta
-        pagination = PaginationMeta(**pagination_meta)
-        return AvailablePlotsResponse(plots=plots, pagination=pagination)
+        # Step 7: Set pagination headers and return response
+        response.headers["X-Pagination-Limit"] = str(pagination_meta["limit"])
+        response.headers["X-Pagination-Has-Next-Page"] = str(pagination_meta["hasNextPage"]).lower()
+        response.headers["X-Pagination-Total-Returned"] = str(pagination_meta["totalReturned"])
+        
+        # Only set next cursor if there is a next page
+        if pagination_meta["hasNextPage"] and pagination_meta["nextCursor"]:
+            response.headers["X-Pagination-Next-Cursor"] = pagination_meta["nextCursor"]
+        
+        return AvailablePlotsHeaderResponse(plots=plots)
         
     except Exception as e:
         raise HTTPException(
@@ -309,7 +325,7 @@ async def update_plot_status(
 
 @router.get(
     "/plot-detail",
-    response_model=PlotDetailsResponse,
+    response_model=PlotDetailsHeaderResponse,
     status_code=status.HTTP_200_OK,
     responses={
         401: {"description": "Unauthorized - Invalid or expired JWT token"},
@@ -317,7 +333,7 @@ async def update_plot_status(
     },
     summary="Get Plot Details",
     description="""
-    Get detailed plot information for a specific zone.
+    Get detailed plot information for a specific zone with header-based pagination.
     
     **Logic**: Returns comprehensive plot data including business allocation details.
     Provides metadata with summary statistics and detailed plot information.
@@ -327,22 +343,36 @@ async def update_plot_status(
     - Zone admins can only access plots in their assigned zone
     - Super admins and normal users can access plots in any zone
     
+    **Query Parameters**:
+    - `country`: Country name (required)
+    - `zoneCode`: Zone code (required)
+    - `limit`: Number of items per page (1-100, default: 50)
+    - `cursor`: Cursor for pagination (document ID from previous page)
+    
+    **Pagination Headers** (in response):
+    - `X-Pagination-Limit`: Number of items per page
+    - `X-Pagination-Has-Next-Page`: true/false if more pages exist
+    - `X-Pagination-Next-Cursor`: Document ID for next page (if hasNextPage is true)
+    - `X-Pagination-Total-Returned`: Number of items in current response
+    
     **Response Format**:
     - metadata: Summary statistics (total plots, available plots)
     - plots: Array of detailed plot information with business data
     """
 )
 async def get_plot_details(
+    response: Response,
     country: str = Query(..., max_length=50, description="Country name"),
     zoneCode: str = Query(..., max_length=10, description="Zone code"),
     limit: int = Query(50, ge=1, le=100, description="Number of items per page (1-100)"),
     cursor: Optional[str] = Query(None, description="Cursor for pagination (document ID from previous page)"),
     user: JWTPayload = Depends(require_plots_read)
-) -> PlotDetailsResponse:
+) -> PlotDetailsHeaderResponse:
     """
-    Get detailed plot information for a specific zone with pagination.
+    Get detailed plot information for a specific zone with header-based pagination.
     
     Args:
+        response: FastAPI response object (for setting headers)
         country: Country name (required)
         zoneCode: Zone code (required)
         limit: Number of items per page (1-100, default: 50)
@@ -350,7 +380,7 @@ async def get_plot_details(
         user: Authenticated user (injected by dependency)
         
     Returns:
-        PlotDetailsResponse: Detailed plot information with metadata and pagination
+        PlotDetailsHeaderResponse: Detailed plot information with metadata (pagination in headers)
         
     Raises:
         HTTPException: 403 if zone access denied
@@ -359,7 +389,17 @@ async def get_plot_details(
         params = PlotDetailsQueryParams(country=country, zoneCode=zoneCode, limit=limit, cursor=cursor)
         user_zone = user.zone if user.role == "zone_admin" else None
         result = await firestore_service.get_plot_details(params, user_zone)
-        return result
+        
+        # Set pagination headers
+        response.headers["X-Pagination-Limit"] = str(result.pagination.limit)
+        response.headers["X-Pagination-Has-Next-Page"] = str(result.pagination.hasNextPage).lower()
+        response.headers["X-Pagination-Total-Returned"] = str(result.pagination.totalReturned)
+        
+        # Only set next cursor if there is a next page
+        if result.pagination.hasNextPage and result.pagination.nextCursor:
+            response.headers["X-Pagination-Next-Cursor"] = result.pagination.nextCursor
+        
+        return PlotDetailsHeaderResponse(metadata=result.metadata, plots=result.plots)
     
     except PermissionError as e:
         raise HTTPException(
