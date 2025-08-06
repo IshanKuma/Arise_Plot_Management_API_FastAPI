@@ -56,49 +56,50 @@ class PlotResponse(BaseModel):
         }
 
 
-class PaginationMeta(BaseModel):
-    """Pagination metadata for paginated responses."""
-    limit: int = Field(..., description="Items per page")
-    hasNextPage: bool = Field(..., description="Whether there are more items")
-    nextCursor: Optional[str] = Field(None, description="Cursor for next page (if hasNextPage is true)")
-    totalReturned: int = Field(..., description="Number of items in current response")
+# COMMENTED OUT - REDUNDANT: Body-based pagination (replaced by header-based)
+# class PaginationMeta(BaseModel):
+#     """Pagination metadata for paginated responses."""
+#     limit: int = Field(..., description="Items per page")
+#     hasNextPage: bool = Field(..., description="Whether there are more items")
+#     nextCursor: Optional[str] = Field(None, description="Cursor for next page (if hasNextPage is true)")
+#     totalReturned: int = Field(..., description="Number of items in current response")
 
 
-class AvailablePlotsResponse(BaseModel):
-    """
-    Response schema for GET /plots/available endpoint.
-    
-    As per API specification:
-    - plots: array of plot objects, mandatory
-    - pagination: metadata for cursor-based pagination
-    """
-    plots: List[PlotResponse] = Field(..., description="Array of plot objects")
-    pagination: PaginationMeta = Field(..., description="Pagination metadata")
+# class AvailablePlotsResponse(BaseModel):
+#     """
+#     Response schema for GET /plots/available endpoint.
+#     
+#     As per API specification:
+#     - plots: array of plot objects, mandatory
+#     - pagination: metadata for cursor-based pagination
+#     """
+#     plots: List[PlotResponse] = Field(..., description="Array of plot objects")
+#     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
-    class Config:
-        """Pydantic configuration."""
-        schema_extra = {
-            "example": {
-                "plots": [
-                    {
-                        "plotName": "GSEZ-RES-001",
-                        "plotStatus": "Available",
-                        "category": "Residential",
-                        "phase": 1,
-                        "areaInSqm": 1000.00,
-                        "areaInHa": 0.10,
-                        "zoneCode": "GSEZ",
-                        "country": "Gabon"
-                    }
-                ],
-                "pagination": {
-                    "limit": 50,
-                    "hasNextPage": True,
-                    "nextCursor": "plot_doc_id_456",
-                    "totalReturned": 50
-                }
-            }
-        }
+#     class Config:
+#         """Pydantic configuration."""
+#         schema_extra = {
+#             "example": {
+#                 "plots": [
+#                     {
+#                         "plotName": "GSEZ-RES-001",
+#                         "plotStatus": "Available",
+#                         "category": "Residential",
+#                         "phase": 1,
+#                         "areaInSqm": 1000.00,
+#                         "areaInHa": 0.10,
+#                         "zoneCode": "GSEZ",
+#                         "country": "Gabon"
+#                     }
+#                 ],
+#                 "pagination": {
+#                     "limit": 50,
+#                     "hasNextPage": True,
+#                     "nextCursor": "plot_doc_id_456",
+#                     "totalReturned": 50
+#                 }
+#             }
+#         }
 
 
 class AvailablePlotsHeaderResponse(BaseModel):
@@ -138,25 +139,18 @@ class PlotQueryParams(BaseModel):
     Query parameters for GET /plots/available endpoint.
     
     As per API specification:
-    - All parameters are optional
-    - Used for filtering plots
+    - country, zoneCode, phase are required for proper collection navigation
+    - Used for filtering plots from {country} -> {zoneCode} -> {phase} structure
     - Pagination parameters added for performance optimization
     """
-    country: Optional[str] = Field(None, max_length=50, description="Filter by country name")
-    zoneCode: Optional[str] = Field(None, max_length=10, description="Filter by zone code")
+    country: str = Field(..., max_length=50, description="Country name (required)")
+    zoneCode: str = Field(..., max_length=10, description="Zone code (required)")
+    phase: str = Field(..., description="Phase identifier (required, e.g., 'phase1')")
     category: Optional[PlotCategory] = Field(None, description="Filter by plot category")
-    phase: Optional[int] = Field(None, ge=1, description="Filter by phase number (positive integer)")
     
     # Pagination parameters
     limit: Optional[int] = Field(50, ge=1, le=100, description="Number of items per page (1-100, default: 50)")
     cursor: Optional[str] = Field(None, description="Cursor for pagination (document ID from previous page)")
-    
-    @validator('zoneCode')
-    def validate_zone_code(cls, v):
-        """Validate zone code format if provided."""
-        if v and (not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6)):
-            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
-        return v
 
     class Config:
         """Pydantic configuration."""
@@ -177,27 +171,29 @@ class PlotUpdateRequest(BaseModel):
     Request schema for PUT /update-plot endpoint.
     
     Logic: Simple plot update matching GET response format exactly.
+    Requires country, zoneCode, and phase for proper collection navigation.
+    Optional fields handle cases where not all countries have complete data.
     """
-    plotName: str = Field(..., max_length=50, description="Plot identifier")
-    plotStatus: PlotStatus = Field(..., description="Plot status")
-    category: PlotCategory = Field(..., description="Plot category")
-    phase: int = Field(..., description="Phase number")
-    areaInSqm: str = Field(..., description="Area in square meters as string")
-    areaInHa: str = Field(..., description="Area in hectares as string")
-    zoneCode: str = Field(..., max_length=10, description="Zone code")
-    country: str = Field(..., max_length=50, description="Country name")
+    country: str = Field(..., max_length=50, description="Country name (required)")
+    zoneCode: str = Field(..., max_length=10, description="Zone code (required)")
+    phase: str = Field(..., description="Phase identifier (required, e.g., 'phase1')")
+    plotName: str = Field(..., max_length=50, description="Plot identifier (required)")
+    plotStatus: PlotStatus = Field(..., description="Plot status (required)")
+    category: Optional[PlotCategory] = Field(None, description="Plot category (optional)")
+    areaInSqm: Optional[str] = Field(None, description="Area in square meters as string (optional)")
+    areaInHa: Optional[str] = Field(None, description="Area in hectares as string (optional)")
 
     class Config:
         schema_extra = {
             "example": {
-                "plotName": "C-4G  TEMPORARY",
+                "country": "drc",
+                "zoneCode": "CIP", 
+                "phase": "phase1",
+                "plotName": "INTEGRATED JETTY & LOGISTIC ZONE",
                 "plotStatus": "Available",
-                "category": "Industrial", 
-                "phase": 1,
-                "areaInSqm": "0.0",
-                "areaInHa": "0.0",
-                "zoneCode": "UNKNOWN",
-                "country": "Gabon"
+                "category": "Industrial",
+                "areaInSqm": "0",
+                "areaInHa": "0"
             }
         }
 
@@ -214,10 +210,12 @@ class PlotReleaseRequest(BaseModel):
     Request schema for PATCH /update-plot endpoint.
     
     Logic: Minimal request for updating plot status.
+    Requires country, zoneCode, and phase for proper collection navigation.
     Can set status to either 'Available' or 'Occupied'.
     """
-    country: str = Field(..., max_length=50, description="Country name")
-    zoneCode: Optional[str] = Field(None, max_length=10, description="Zone code (optional - will be looked up)")
+    country: str = Field(..., max_length=50, description="Country name (required)")
+    zoneCode: str = Field(..., max_length=10, description="Zone code (required)")
+    phase: str = Field(..., description="Phase identifier (required, e.g., 'phase1')")
     plotName: str = Field(..., max_length=50, description="Plot identifier")
     plotStatus: str = Field(..., description="Plot status: 'Available' or 'Occupied'")
 
@@ -228,16 +226,12 @@ class PlotReleaseRequest(BaseModel):
             raise ValueError('Plot status must be either "Available" or "Occupied"')
         return v.title()  # Convert to title case (Available/Occupied)
 
-    @validator('zoneCode')
-    def validate_zone_code(cls, v):
-        if v and (not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha()):
-            raise ValueError('Zone code must be 4-6 uppercase letters')
-        return v
-
     class Config:
         schema_extra = {
             "example": {
-                "country": "Gabon",
+                "country": "gabon",
+                "zoneCode": "GSEZ", 
+                "phase": "phase1",
                 "plotName": "C-4G  TEMPORARY", 
                 "plotStatus": "Available"
             }
@@ -263,12 +257,6 @@ class ZoneCreateRequest(BaseModel):
     zoneCode: str = Field(..., max_length=10, description="Unique zone identifier")
     phase: str = Field(..., description="Phase number as string")
     landArea: str = Field(..., description="Land area with unit (e.g., '120 Ha')")
-
-    @validator('zoneCode')
-    def validate_zone_code(cls, v):
-        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
-            raise ValueError('Zone code must be 4-6 uppercase letters')
-        return v
 
     class Config:
         schema_extra = {
@@ -322,59 +310,56 @@ class PlotDetailsQueryParams(BaseModel):
     """
     Query parameters for GET /plot-details endpoint.
     
-    Logic: Country and zone filter with pagination for detailed plot information.
+    Logic: Country, zone, and phase filter with pagination for detailed plot information.
+    Uses static mapping for optimal performance.
     """
-    country: str = Field(..., max_length=50, description="Country name")
-    zoneCode: str = Field(..., max_length=10, description="Zone code")
+    country: str = Field(..., max_length=50, description="Country name (required)")
+    zoneCode: str = Field(..., max_length=10, description="Zone code (required)")
+    phase: str = Field(..., description="Phase identifier (required, e.g., 'phase1')")
     
     # Pagination parameters
     limit: Optional[int] = Field(50, ge=1, le=100, description="Number of items per page (1-100, default: 50)")
     cursor: Optional[str] = Field(None, description="Cursor for pagination (document ID from previous page)")
 
-    @validator('zoneCode')
-    def validate_zone_code(cls, v):
-        if not v.isupper() or not (4 <= len(v) <= 6) or not v.isalpha():
-            raise ValueError('Zone code must be 4-6 uppercase letters')
-        return v
 
+# COMMENTED OUT - REDUNDANT: Body-based pagination (replaced by header-based)
+# class PlotDetailsResponse(BaseModel):
+#     """Response schema for GET /plot-details endpoint with pagination."""
+#     metadata: PlotDetailsMetadata
+#     plots: List[PlotDetailsItem]
+#     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
-class PlotDetailsResponse(BaseModel):
-    """Response schema for GET /plot-details endpoint with pagination."""
-    metadata: PlotDetailsMetadata
-    plots: List[PlotDetailsItem]
-    pagination: PaginationMeta = Field(..., description="Pagination metadata")
-
-    class Config:
-        schema_extra = {
-            "example": {
-                "metadata": {
-                    "country": "Gabon",
-                    "zoneCode": "GSEZ",
-                    "totalPlots": 10,
-                    "availablePlots": 7
-                },
-                "plots": [
-                    {
-                        "plotName": "GSEZ-R-001",
-                        "category": "Residential",
-                        "areaInHa": 0.5,
-                        "sector": "Housing",
-                        "activity": None,
-                        "plotStatus": "Available",
-                        "companyName": None,
-                        "allocatedDate": None,
-                        "investmentAmount": None,
-                        "employmentGenerated": None
-                    }
-                ],
-                "pagination": {
-                    "limit": 50,
-                    "hasNextPage": False,
-                    "nextCursor": None,
-                    "totalReturned": 10
-                }
-            }
-        }
+#     class Config:
+#         schema_extra = {
+#             "example": {
+#                 "metadata": {
+#                     "country": "Gabon",
+#                     "zoneCode": "GSEZ",
+#                     "totalPlots": 10,
+#                     "availablePlots": 7
+#                 },
+#                 "plots": [
+#                     {
+#                         "plotName": "GSEZ-R-001",
+#                         "category": "Residential",
+#                         "areaInHa": 0.5,
+#                         "sector": "Housing",
+#                         "activity": None,
+#                         "plotStatus": "Available",
+#                         "companyName": None,
+#                         "allocatedDate": None,
+#                         "investmentAmount": None,
+#                         "employmentGenerated": None
+#                     }
+#                 ],
+#                 "pagination": {
+#                     "limit": 50,
+#                     "hasNextPage": False,
+#                     "nextCursor": None,
+#                     "totalReturned": 10
+#                 }
+#             }
+#         }
 
 
 class PlotDetailsHeaderResponse(BaseModel):

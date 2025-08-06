@@ -29,13 +29,6 @@ class AuthTokenRequest(BaseModel):
     userId: str = Field(..., max_length=50, description="Valid user identifier")
     role: UserRole = Field(..., description="User role: super_admin, zone_admin, or normal_user")
     zone: str = Field(..., max_length=10, description="Valid zone code (e.g., GSEZ, OSEZ)")
-    
-    @validator('zone')
-    def validate_zone_code(cls, v):
-        """Validate zone code format: 4-6 uppercase letters."""
-        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
-            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
-        return v
 
     class Config:
         """Pydantic configuration."""
@@ -147,13 +140,6 @@ class CreateUserRequest(BaseModel):
             raise ValueError('Invalid email format')
         return v.lower()
     
-    @validator('zone')
-    def validate_zone_code(cls, v):
-        """Validate zone code format: 4-6 uppercase letters."""
-        if not v.isalpha() or not v.isupper() or not (4 <= len(v) <= 6):
-            raise ValueError('Zone code must be 4-6 uppercase letters (e.g., GSEZ, OSEZ)')
-        return v
-
     class Config:
         """Pydantic configuration."""
         schema_extra = {
@@ -186,13 +172,6 @@ class UpdateUserRequest(BaseModel):
             raise ValueError('Invalid email format')
         return v.lower()
     
-    @validator('zone')
-    def validate_zone(cls, v):
-        """Validate zone - accept country names or zone codes."""
-        if v and len(v.strip()) == 0:
-            raise ValueError('Zone cannot be empty')
-        return v
-
     class Config:
         """Pydantic configuration."""
         schema_extra = {

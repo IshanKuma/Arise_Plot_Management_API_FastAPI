@@ -35,7 +35,7 @@ router = APIRouter(prefix="/country", tags=["Zones"])
     
     **Business Validation**:
     - Zone code must be unique across the system
-    - Zone code format: 4-6 uppercase letters (e.g., GSEZ, OSEZ)
+    - Zone code format: any zone identifier (e.g., GSEZ, PIA, BSEZ)
     - Zone type must be one of: SEZ, Industrial, Commercial
     - Land area must be positive value in hectares
     

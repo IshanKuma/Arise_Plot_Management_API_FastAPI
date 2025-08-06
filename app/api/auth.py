@@ -53,7 +53,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     - `zone_admin`: Read/write access to assigned zone only  
     - `normal_user`: Read-only access to plots
     
-    **Valid Zone Codes:** GSEZ, OSEZ, GABON (4-6 uppercase letters)
+    **Valid Zone Codes:** Any zone identifier (e.g., GSEZ, PIA, BSEZ, CIP, GDIZ, IPR, PIC)
     """
 )
 async def create_access_token(
